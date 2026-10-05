@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
     CODEX_CLIENT_VERSION,
+    CodexCatalogError,
     fetchCodexCatalog,
     normalizeCodexModelCache,
 } from "../../src/model/codex-catalog.ts";
@@ -155,6 +156,24 @@ describe("fetchCodexCatalog", () => {
         }
         expect(readProviderCatalogSnapshot("openai-codex", { cacheDir: directory }).models)
             .toHaveLength(saved);
+    });
+
+    test("each failure names its kind so a refresh can report it", async () => {
+        const failureOf = async (authStorage: ReturnType<typeof signedIn>, fetch: typeof globalThis.fetch) =>
+            fetchCodexCatalog({ authStorage, cacheDir: scratch(), fetch })
+                .then(() => "ok", (error: unknown) => error instanceof CodexCatalogError ? error.failure : "untyped");
+        const answering = (response: () => Response) => (async () => response()) as unknown as typeof globalThis.fetch;
+
+        expect(await failureOf(signedIn(scratch()), answering(() => new Response("down", { status: 503 })))).toBe("unavailable");
+        expect(await failureOf(signedIn(scratch()), answering(() => Response.json({ models: [] })))).toBe("empty_response");
+        expect(await failureOf(signedIn(scratch()), (async () => { throw new Error("offline"); }) as unknown as typeof globalThis.fetch))
+            .toBe("unavailable");
+        // 401 spends the one refresh; the token endpoint refusing it is a sign-in problem.
+        const rejecting = async (input: string | URL | Request) =>
+            String(input).includes("/models") ? new Response("no", { status: 401 }) : new Response("bad", { status: 400 });
+        expect(await failureOf(signedIn(scratch()), rejecting as unknown as typeof globalThis.fetch)).toBe("authentication");
+        expect(await failureOf(createAuthStorage({ path: join(scratch(), "auth.json") }), answering(() => Response.json(fixture))))
+            .toBe("missing_credential");
     });
 
     test("signed out is an error, not an empty list", async () => {
