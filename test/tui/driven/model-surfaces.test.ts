@@ -370,7 +370,7 @@ test("ctrl+g opens the whole list without leaving the switcher", async () => {
         session.sendKey("Enter"); await session.waitForVisiblePane("models land here");
         session.sendKey("C-g");
         // Ctrl+G is the pane key everywhere else; inside the switcher it fills the list.
-        const all = await session.waitForVisiblePane("All connected models");
+        const all = await session.waitForVisiblePane("● All connected");
         expect(all).toContain("Switch model");
         expect(all).toContain("One");
         session.sendKey("C-g"); await session.waitForVisiblePane("models land here");

@@ -15,6 +15,7 @@ import {
     switcherFooterText,
     switcherRowProvider,
     switcherScope,
+    switcherHeader,
     switcherScopeLabel,
     switcherStop,
     switcherUnlistedHint,
@@ -266,6 +267,12 @@ describe("model switcher scope", () => {
             .toEqual(["Favorites", "Recent", "openai", "ollama"]);
         expect(switcherScopeLabel(all)).toBe("All connected models");
         expect(switcherScopeLabel(resting())).toBe("Favorites");
+    });
+
+    test("the header shows both scopes with the current one filled", () => {
+        expect(switcherHeader(resting(), 80)).toBe("Switch model · ● Favorites  ○ All connected");
+        expect(switcherHeader(scoped(resting()), 80)).toBe("Switch model · ○ Favorites  ● All connected");
+        expect(switcherHeader(resting(), 30)).toBe("Switch model · Favorites");
     });
 
     test("nothing is left over once the list holds everything", () => {

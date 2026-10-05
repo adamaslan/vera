@@ -528,10 +528,11 @@ export function createTuiModelSwitcherView(
             for (const node of nodes) node.destroyRecursively();
             nodes = [];
 
+            const hint = state.query.trim().length === 0 ? "Ctrl+G scope · esc" : "esc";
             const header = dialogHeaderNode(
                 renderer,
-                `Switch model · ${switcherScopeLabel(state)}`,
-                state.query.trim().length === 0 ? "Ctrl+G scope · esc" : "esc",
+                switcherHeader(state, switcherContentWidth(renderer) - Bun.stringWidth(hint) - 2),
+                hint,
             );
             updateDialogSearchNode(
                 search,
@@ -804,6 +805,15 @@ export function switcherCaption(state: TuiModelSwitcherState): string {
 export function switcherScopeLabel(state: TuiModelSwitcherState): string {
     if (state.query.trim().length !== 0) return "Search all connected models";
     return switcherScope(state) === "all" ? "All connected models" : "Favorites";
+}
+
+/** Both scopes with the current one filled, like Browse models; narrow cards name only the current one. */
+export function switcherHeader(state: TuiModelSwitcherState, width: number): string {
+    if (state.query.trim().length !== 0) return `Switch model · ${switcherScopeLabel(state)}`;
+    const current = switcherScope(state);
+    const scopes: readonly [TuiModelSwitcherScope, string][] = [["favorites", "Favorites"], ["all", "All connected"]];
+    const indicator = `Switch model · ${scopes.map(([scope, label]) => `${scope === current ? "●" : "○"} ${label}`).join("  ")}`;
+    return Bun.stringWidth(indicator) <= width ? indicator : `Switch model · ${switcherScopeLabel(state)}`;
 }
 
 /** A search that reached its limit says where the rest of the matches are. */
