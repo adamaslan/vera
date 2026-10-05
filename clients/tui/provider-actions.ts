@@ -18,18 +18,20 @@ export function providerActions(
     // A provider that has never answered is here to be connected. Without this
     // the only way through is the endpoint form, which asks for a URL the user
     // has no reason to change.
-    if (provider.answerState !== "connected") {
+    const connected = provider.answerState === "connected";
+    if (!connected) {
         options.push({
             value: "connect",
             label: "Connect",
             description: "Set this provider up and read its catalog",
         });
     }
-    options.push({
-        value: editable ? "edit" : "reconnect",
-        label: editable ? "Edit" : "Reconnect",
-        description: editable ? "Change the endpoint or credentials" : "Sign in again",
-    });
+    // Connect and Reconnect start the same sign-in, so only one is offered.
+    if (editable) {
+        options.push({ value: "edit", label: "Edit", description: "Change the endpoint or credentials" });
+    } else if (connected) {
+        options.push({ value: "reconnect", label: "Reconnect", description: "Sign in again" });
+    }
     // A provider Vera runs itself is also a process to start, stop and point
     // elsewhere. Those belong here rather than on keys of their own.
     if (provider.localRuntime === true) {
