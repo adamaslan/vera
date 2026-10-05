@@ -21,6 +21,7 @@ import type {
     StatusLineSnapshot,
 } from "../../src/extensions/status-line.ts";
 import { findProvider } from "../../src/providers/registry.ts";
+import { mixHex } from "./theme.ts";
 
 export function tuiStatusSnapshot(
     settings: ModelTurnSettings | undefined,
@@ -305,8 +306,9 @@ export function statusToneColor(tone: TuiStatusTone): string {
             return TUI_TEXT;
         case "muted":
             return TUI_MUTED;
-        case "accent":
         case "meter":
+            return mixHex(TUI_ELEMENT, TUI_MUTED, 0.5);
+        case "accent":
             return TUI_ACCENT;
         case "good":
             return TUI_SUCCESS;
