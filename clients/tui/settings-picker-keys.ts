@@ -318,9 +318,6 @@ function modelPickerKey(
             handled: true,
         };
     }
-    if (binding === "open_providers") {
-        return { state, handled: true, openProviders: true };
-    }
     const focused = modelFocusKey(state, key);
     if (focused !== undefined) {
         return focused;

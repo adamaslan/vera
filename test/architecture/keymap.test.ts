@@ -104,7 +104,6 @@ const GRANDFATHERED_SILENT_BINDINGS = new Set([
     "refresh_catalog",
     "verify_model",
     "name_pooled",
-    "open_providers",
     "declare_provider",
     "edit_endpoint",
     "forget_provider",
@@ -188,13 +187,8 @@ test("a scope sees its own bindings, the ones it inherits, and the globals", () 
     // And a pane's own chord does not leak into a pane that never claimed it.
     expect(tuiBindingId("session_picker", { name: "s", ctrl: true }))
         .toBeUndefined();
-    // Ctrl+T belongs to transcript detail on the conversation surface, and
-    // ctrl+E to provider connections inside the model picker; those surfaces
-    // never overlap.
     expect(tuiBindingId("conversation", { name: "t", ctrl: true }))
         .toBe("toggle_tool_details");
-    expect(tuiBindingId("model_picker", { name: "e", ctrl: true }))
-        .toBe("open_providers");
     expect(tuiBindingId("global", { name: "[", ctrl: true, shift: true }))
         .toBe("cycle_live_session_prev");
     expect(tuiBindingId("global", { name: "]", ctrl: true, shift: true }))
@@ -367,14 +361,10 @@ test("a digit jumps only while the side bar holds focus", () => {
 });
 
 test("the moved chords take nothing that already resolved", () => {
-    // ctrl+e opens the conversation list everywhere except inside the model picker,
-    // which owns the chord for as long as it is open.
-    expect(tuiBindingId("conversation", { name: "e", ctrl: true }))
-        .toBe("toggle_workspace_sidebar");
-    expect(tuiBindingId("composer", { name: "e", ctrl: true }))
-        .toBe("toggle_workspace_sidebar");
-    expect(tuiBindingId("model_picker", { name: "e", ctrl: true }))
-        .toBe("open_providers");
+    // ctrl+e means the conversation list in every scope; no picker claims it.
+    for (const scope of ["conversation", "composer", "model_picker", "shortlist_picker"] as const) {
+        expect(tuiBindingId(scope, { name: "e", ctrl: true })).toBe("toggle_workspace_sidebar");
+    }
     // ctrl+t reads tool details in the transcript, where nothing else answered.
     expect(tuiBindingId("conversation", { name: "t", ctrl: true }))
         .toBe("toggle_tool_details");

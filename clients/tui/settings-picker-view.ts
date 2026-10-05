@@ -2066,7 +2066,6 @@ export function pickerFooterText(
                     drop: 4,
                 }]
                 : []),
-            { text: tuiKeyHint("open_providers"), drop: 6 },
             { text: "⇥ section", drop: 3 },
             { text: "esc tabs", drop: 0 },
         ], width);

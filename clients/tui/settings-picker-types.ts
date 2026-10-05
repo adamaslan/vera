@@ -739,7 +739,7 @@ export function tuiModelActionOptions(
     rows.push({
         value: tuiModelActionValue("providers"),
         label: "Connect, edit or forget a provider",
-        description: tuiKeyHint("open_providers").split(" ")[0] ?? "",
+        description: "",
         note:
             "Opens the provider list, where keys and endpoints are set and a provider can be removed.",
         detailTitle: "providers",

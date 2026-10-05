@@ -162,12 +162,6 @@ export const TUI_KEYMAP: readonly TuiBinding[] = [
         overrides: ["switch_pane"],
     },
     {
-        id: "shortlist_providers", keys: ["ctrl+e"], scope: "shortlist_picker",
-        description: "Open Configure providers", hint: "Ctrl+E providers",
-        remappable: true,
-        overrides: ["toggle_workspace_sidebar"],
-    },
-    {
         id: "shortlist_rename", keys: ["ctrl+r"], scope: "shortlist_picker",
         description: "Rename the selected display name", hint: "Ctrl+R rename",
         remappable: true,
@@ -519,14 +513,6 @@ export const TUI_KEYMAP: readonly TuiBinding[] = [
         description: "Name the selected model in your favorites",
         hint: "Ctrl+N name",
         overrides: ["workspace_new_session"],
-    },
-    {
-        id: "open_providers",
-        keys: ["ctrl+e"],
-        scope: "model_picker",
-        description: "Connect or disconnect a provider",
-        hint: "Ctrl+E providers",
-        overrides: ["toggle_workspace_sidebar"],
     },
     {
         id: "declare_provider",

@@ -15,7 +15,7 @@ choose models for jobs such as compaction and delegated work.
 | Browse every model, with prices and scores | `/models` |
 | Save models for quick access | Favorites, in `/models` |
 | Assign models to other jobs | Defaults, in `/models` |
-| Connect a provider | Providers, in `/models`, or Ctrl+E there |
+| Connect a provider | Providers, in `/models` Actions, or Configure providers on Ctrl+P |
 
 Switch model changes what runs next and writes nothing that outlives the
 conversation, except a favorite. `/models` is the opposite: it browses,
@@ -222,7 +222,6 @@ any picker control moves into Search.
 | Ctrl+S | | Add or remove the favorite. |
 | Ctrl+R | | Rename the highlighted model. |
 | Ctrl+Y | | Verify the highlighted model. |
-| Ctrl+E | | Configure providers. |
 | Ctrl+K | | Open actions for the highlighted model. |
 | Ctrl+G | | Move to the next scope: Favorites, Recommended, All connected. |
 | Ctrl+D / Ctrl+U | Move half a page down / up. | Move half a page down / up. |

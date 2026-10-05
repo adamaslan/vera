@@ -514,7 +514,6 @@ export function handleModelBrowseKey(state: TuiSettingsPickerState, key: TuiSett
     }
     if (binding !== undefined || key.ctrl) {
         if (binding === "journey_reveal" || binding === "shortlist_reveal") return { state: rebuiltBrowse({ ...state, revealAll: state.revealAll !== true }, selected?.value), handled: true };
-        if (binding === "shortlist_providers") return { ...same, openProviders: true };
         if (binding === "journey_refresh") return { ...same, refreshAllCatalogs: true };
         if (binding === "journey_scope") {
             return { state: rebuiltBrowse({ ...state, tab: nextBrowseScope(state.tab, key.shift !== true) }, selected?.value), handled: true };

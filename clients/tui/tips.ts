@@ -50,9 +50,7 @@ export const TUI_TIPS: readonly TuiTip[] = [
     {
         id: "connect-provider",
         text: () =>
-            `Press ${
-                tuiKeyChordLabel("open_providers")
-            } to connect another provider`,
+            "Press Ctrl+P and choose Configure providers to connect another provider",
         cooldownLaunches: 10,
         isRelevant: (context) => context.inModelPicker,
     },

@@ -2952,9 +2952,8 @@ test("the declare row survives a search that matches no provider", async () => {
         .declareProvider).toBe(true);
 });
 
-test("ctrl+e asks for the connect pane instead of building it", () => {
-    // Which providers are connected is a fact about the disk, so the pane
-    // reports the request and the client that can read it answers.
+test("ctrl+e in the model pane does not open providers", () => {
+    // Ctrl+E means the conversation list everywhere; providers sit under Actions and Ctrl+P.
     const model = startTuiSettingsPicker(
         "model",
         "z-ai/glm-5.2",
@@ -2970,9 +2969,7 @@ test("ctrl+e asks for the connect pane instead of building it", () => {
         ctrl: true,
     });
 
-    expect(transition.handled).toBe(true);
-    expect(transition.openProviders).toBe(true);
-    expect(transition.state).toBe(model);
+    expect(transition.openProviders).toBeUndefined();
     expect(transition.selection).toBeUndefined();
 });
 
