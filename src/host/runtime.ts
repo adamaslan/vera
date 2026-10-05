@@ -108,6 +108,7 @@ import {
 import { migrateConfigPool } from "../model/pool-migration.ts";
 import { createPoolEffortPool } from "../model/effort-pool.ts";
 import {
+    CodexCatalogError,
     fetchCodexCatalog,
     readCodexCatalog,
 } from "../model/codex-catalog.ts";
@@ -541,11 +542,10 @@ export async function startResidentHost(
                     }
                     if (provider === OPENAI_CODEX_PROVIDER_ID) {
                         if (!hasCodexCredential(authStorage)) return undefined;
-                        const fetched = await fetchCodexCatalog({
-                            authStorage,
+                        const outcome = await refreshCodexCatalog(authStorage, {
                             ...(options.catalogFetch === undefined ? {} : { fetch: options.catalogFetch }),
-                        }).catch(() => undefined);
-                        if (fetched === undefined) return undefined;
+                        });
+                        if (outcome?.failure !== undefined) return undefined;
                         const rows = discoveredCodexModels(config, { authStorage });
                         models = withProviderRefreshability(
                             replaceProviderRows(models, provider, rows),
@@ -1390,6 +1390,8 @@ export type CatalogRefreshFailure =
 export interface CatalogRefreshOptions {
     readonly authStorage?: AuthStorage;
     readonly cacheDir?: string;
+    // Codex catalog requests only.
+    readonly fetch?: typeof globalThis.fetch;
 }
 
 export async function refreshProviderCatalogs(
@@ -1400,7 +1402,7 @@ export async function refreshProviderCatalogs(
         ? {}
         : { cacheDir: options.cacheDir };
     const authStorage = options.authStorage ?? createAuthStorage();
-    const [ollama, openrouter, standard] = await Promise.all([
+    const [ollama, openrouter, standard, codex] = await Promise.all([
         discoverOllamaModelCatalog({
             ...cacheOptions,
             ...(config.provider_endpoints?.ollama === undefined
@@ -1419,6 +1421,10 @@ export async function refreshProviderCatalogs(
                 maxAgeMs: 0,
             })
         )),
+        refreshCodexCatalog(authStorage, {
+            ...cacheOptions,
+            ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        }),
         refreshWebDevArena({ ...cacheOptions, maxAgeMs: 0 }).catch(() => undefined),
     ]);
     return [
@@ -1432,7 +1438,29 @@ export async function refreshProviderCatalogs(
             standardProviderDescriptors(config)[index]!.id,
             result,
         )),
+        ...(codex === undefined ? [] : [codex]),
     ];
+}
+
+// Signed out returns undefined: Codex is optional, unlike the configured providers.
+export async function refreshCodexCatalog(
+    authStorage: AuthStorage,
+    options: { readonly cacheDir?: string; readonly fetch?: typeof globalThis.fetch },
+): Promise<CatalogRefreshOutcome | undefined> {
+    if (!hasCodexCredential(authStorage)) return undefined;
+    try {
+        const catalog = await fetchCodexCatalog({ authStorage, ...options });
+        return { provider: OPENAI_CODEX_PROVIDER_ID, models: catalog.models.length };
+    } catch (error) {
+        const failure = error instanceof CodexCatalogError ? error.failure : "unavailable";
+        hostLog({
+            type: "codex_catalog_refresh_failed",
+            failure,
+            message: error instanceof Error ? error.message : String(error),
+        });
+        const kept = readCodexCatalog(options.cacheDir).models.length;
+        return { provider: OPENAI_CODEX_PROVIDER_ID, failure, ...(kept === 0 ? {} : { keptModels: kept }) };
+    }
 }
 
 export function replaceProviderRows(

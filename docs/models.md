@@ -255,7 +255,8 @@ vera models refresh
 Adding without `--verify` saves the reference without contacting the provider.
 With `--verify`, Vera saves it only after the required tool-calling check passes.
 Refreshing updates a running host's catalog, or the cache for the next host.
-No TUI restart is needed.
+It covers a signed-in ChatGPT subscription along with your other providers and
+reports each one. No TUI restart is needed.
 
 The older `vera shortlist` spelling remains an alias for `vera library`.
 

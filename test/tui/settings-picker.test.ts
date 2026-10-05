@@ -4381,6 +4381,22 @@ test("named provider connection prefills its endpoint and protocol without hidin
 });
 
 
+test("a rule divides the provider groups from the actions under them", async () => {
+    const lines = (await pickerFrame(startTuiProviderPicker(PROVIDER_ROWS), 151, 40)).split("\n");
+    const refresh = lines.findIndex((line) => line.includes("Refresh providers"));
+    const rule = lines.findLastIndex((line, index) => index < refresh && /─{20,}/.test(line));
+
+    expect(rule).toBeGreaterThan(lines.findIndex((line) => line.includes("gemini")));
+    expect(lines[rule - 1]!.replace(/[│┃\s]/g, "")).toBe("");
+    expect(lines[rule + 1]!.replace(/[│┃\s]/g, "")).toBe("");
+    expect(refresh).toBe(rule + 2);
+
+    const searched = updateTuiSettingsPickerSearch(startTuiProviderPicker(PROVIDER_ROWS), "zzz").state!;
+    const searchedFrame = await pickerFrame(searched, 151, 40);
+    // Only the title underline is left when no provider is listed above the actions.
+    expect(searchedFrame.split("\n").filter((line) => /─{20,}/.test(line))).toHaveLength(1);
+});
+
 test("Refresh providers is a visible action that preserves the provider list", async () => {
     const pane = startTuiProviderPicker(PROVIDER_ROWS, { selected: TUI_REFRESH_PROVIDERS_VALUE });
     const frame = await pickerFrame(pane, 151, 36);

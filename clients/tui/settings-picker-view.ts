@@ -761,6 +761,8 @@ export function tuiPickerViewportRows(
 const MODEL_FILTER_LABEL = "Filter Models: ";
 /** Fits " › Cheapest first ▾ ", the longest sort label, so the chip never resizes. */
 const MODEL_SORT_WIDTH = 20;
+// A blank line and the rule between the provider groups and the actions under them.
+const PROVIDER_ACTION_RULE_LINES = 2;
 
 function browseScopeLayout(renderer: RenderContext, state: TuiSettingsPickerState, railInset = 0) {
     const width = pickerContentWidth(renderer, state, railInset);
@@ -1316,12 +1318,17 @@ export function renderListPickerRows(
     const sessionGapLines = state.kind === "session"
         ? Math.max(0, state.options.filter((option) => option.section !== undefined).length - 1)
         : 0;
+    const providerRuleLines = state.kind === "provider"
+            && state.options.some((option) => option.action !== true)
+            && state.options.some((option) => option.action === true)
+        ? PROVIDER_ACTION_RULE_LINES
+        : 0;
     const rows = windowedDisplayRows(
         listDisplayRows(state),
         state.selectedIndex,
         tab === "all"
             ? Math.min(availableRows, MODEL_ALL_MAX_ROWS)
-            : Math.max(1, availableRows - sessionGapLines),
+            : Math.max(1, availableRows - sessionGapLines - providerRuleLines),
     );
     let firstHeading = true;
     let lines = 0;
@@ -1535,6 +1542,23 @@ export function renderListPickerRows(
         lines += 1;
     }
     (stackedPage ? [] : rows).forEach((row, position) => {
+        const previous = rows[position - 1];
+        if (
+            state.kind === "provider" && row.kind === "option"
+            && row.option.action === true && previous !== undefined
+            && !(previous.kind === "option" && previous.option.action === true)
+        ) {
+            const rule = new TextRenderable(renderer, {
+                content: new StyledText([fg(TUI_ELEMENT)("─".repeat(rowWidth))]),
+                width: rowWidth,
+                height: 1,
+                marginTop: 1,
+                selectable: false,
+            });
+            modelTree.add(rule);
+            nodes.push(rule);
+            lines += PROVIDER_ACTION_RULE_LINES;
+        }
         const node = row.kind === "group"
             ? dialogGroupHeaderNode(renderer, row.label, position > 0)
             : optionNodes[optionNodeIndex++]!;

@@ -13,6 +13,7 @@ import {
     type OpenAICodexAuthorization,
     type OpenAICodexAuthorizationOptions,
 } from "../providers/openai-codex-oauth.ts";
+import { createAuthStorage } from "../providers/auth-storage.ts";
 
 const PROVIDER = "openai-codex";
 const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api/codex";
@@ -32,7 +33,22 @@ export function readCodexCatalog(cacheDir?: string): ProviderCatalog {
     );
 }
 
-// Throws when the request fails, so a failed refresh never replaces the saved list.
+export type CodexCatalogFailure =
+    | "missing_credential"
+    | "authentication"
+    | "unavailable"
+    | "empty_response"
+    | "persistence_failed";
+
+export class CodexCatalogError extends Error {
+    constructor(readonly failure: CodexCatalogFailure, message: string) {
+        super(message);
+        this.name = "CodexCatalogError";
+    }
+}
+
+// Throws CodexCatalogError when the request fails, so a failed refresh never
+// replaces the saved list.
 export async function fetchCodexCatalog(
     options: CodexCatalogFetchOptions = {},
 ): Promise<ProviderCatalog> {
@@ -47,33 +63,56 @@ export async function fetchCodexCatalog(
         if (authorization.accountId !== undefined) {
             headers["chatgpt-account-id"] = authorization.accountId;
         }
-        return fetchRequest(url, { headers, signal: AbortSignal.timeout(10_000) });
+        return fetchRequest(url, { headers, signal: AbortSignal.timeout(10_000) })
+            .catch((error: unknown) => {
+                throw new CodexCatalogError("unavailable", `OpenAI Codex models request failed: ${messageOf(error)}`);
+            });
     };
+    const authorize = (resolve: () => Promise<OpenAICodexAuthorization>): Promise<OpenAICodexAuthorization> =>
+        resolve().catch((error: unknown) => {
+            throw new CodexCatalogError("authentication", `OpenAI Codex sign-in could not be renewed: ${messageOf(error)}`);
+        });
 
-    const authorization = await resolveOpenAICodexAuthorization(options);
+    const authStorage = options.authStorage ?? createAuthStorage();
+    if (authStorage.getCredential(PROVIDER) === undefined) {
+        throw new CodexCatalogError("missing_credential", "OpenAI Codex is not signed in");
+    }
+    const signedIn = { ...options, authStorage };
+    const authorization = await authorize(() => resolveOpenAICodexAuthorization(signedIn));
     let response = await send(authorization);
     if (response.status === 401) {
-        response = await send(await refreshRejectedOpenAICodexAuthorization(
+        response = await send(await authorize(() => refreshRejectedOpenAICodexAuthorization(
             authorization.accessToken,
-            options,
-        ));
+            signedIn,
+        )));
+    }
+    if (response.status === 401 || response.status === 403) {
+        throw new CodexCatalogError("authentication", `OpenAI Codex models returned ${response.status}`);
     }
     if (!response.ok) {
-        throw new Error(`OpenAI Codex models returned ${response.status}`);
+        throw new CodexCatalogError("unavailable", `OpenAI Codex models returned ${response.status}`);
     }
 
     const catalog = {
-        ...normalizeCodexModelCache(await response.json()),
+        ...normalizeCodexModelCache(await response.json().catch(() => undefined)),
         fetched_at: new Date().toISOString(),
     };
     if (catalog.models.length === 0) {
-        throw new Error("OpenAI Codex listed no models");
+        throw new CodexCatalogError("empty_response", "OpenAI Codex listed no models");
     }
-    writeProviderCatalogSnapshot(
-        catalog,
-        options.cacheDir === undefined ? {} : { cacheDir: options.cacheDir },
-    );
+    try {
+        writeProviderCatalogSnapshot(
+            catalog,
+            options.cacheDir === undefined ? {} : { cacheDir: options.cacheDir },
+        );
+    } catch (error) {
+        throw new CodexCatalogError("persistence_failed", `OpenAI Codex models could not be saved: ${messageOf(error)}`);
+    }
     return catalog;
+}
+
+function messageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
 
 export function normalizeCodexModelCache(raw: unknown): ProviderCatalog {
