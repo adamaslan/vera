@@ -57,7 +57,9 @@ model for your next request.
 
 Browse starts with Favorites unless you saved another collection. To see every
 connected model, open **Filter and sort** and choose **All connected**.
-Ctrl+G switches between these two collections.
+The header lists Favorites, Recommended, and All connected, with a filled dot
+on the one you are looking at. Ctrl+G moves to the next and Shift+Ctrl+G to
+the previous. The header only shows where you are; it is not a set of tabs.
 
 Filters narrow results by provider, availability, known price, image support,
 and intelligence score. They also apply to searches. Clearing the search
@@ -165,8 +167,8 @@ You are asked to choose again only when it does not.
 ## Refresh or recover a connection
 
 Choose **Refresh model catalog** from Manage models (the row under the list on
-the browse page) to reload connected catalogs. For a ChatGPT subscription, Vera asks OpenAI for
-the current model list using your sign-in. A brief overlay types catalogs refreshed, new
+the browse page) to reload connected catalogs. For a ChatGPT subscription, Vera
+asks OpenAI for the current model list using your sign-in. A brief overlay types catalogs refreshed, new
 models, and any failures, then a tick. Press Escape to close it when no
 dialog is open;
 otherwise it clears after a few seconds. Another overlay waits its turn.
@@ -222,7 +224,7 @@ any picker control moves into Search.
 | Ctrl+Y | | Verify the highlighted model. |
 | Ctrl+E | | Configure providers. |
 | Ctrl+K | | Open actions for the highlighted model. |
-| Ctrl+G | | Toggle Favorites / All connected. |
+| Ctrl+G | | Move to the next scope: Favorites, Recommended, All connected. |
 | Ctrl+D / Ctrl+U | Move half a page down / up. | Move half a page down / up. |
 | Space in the list | | Fold or unfold a provider group. |
 | Ctrl+A outside Search | | Show or hide extra variants. |

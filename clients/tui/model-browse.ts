@@ -21,12 +21,18 @@ export function nextBrowseScope(
 /** What the scope in front of you holds, and what Enter does to a row in it. */
 export function browseScopeCaption(tab: TuiModelPickerTab | undefined): string {
     if (tab === "all") {
-        return "Every model your providers offer. Press Ctrl+G to switch to Recommended, a shorter list.";
+        return "Every model your providers offer.";
     }
     if (tab === "recommended") {
-        return "A short list, picked by hand and refreshed daily. Press Ctrl+G to see every model.";
+        return "A short list, picked by hand and refreshed daily.";
     }
     return "Models you saved, in the order you added them. \u23ce removes one.";
+}
+
+/** Every scope in Ctrl+G order, the current one marked. A readout, not tabs: only Ctrl+G moves it. */
+export function browseScopeIndicator(tab: TuiModelPickerTab | undefined): string {
+    const current = tab ?? "pool";
+    return BROWSE_SCOPES.map((scope) => `${scope === current ? "●" : "○"} ${browseScopeLabel(scope)}`).join("  ");
 }
 
 export function browseScopeLabel(tab: TuiModelPickerTab | undefined): string {

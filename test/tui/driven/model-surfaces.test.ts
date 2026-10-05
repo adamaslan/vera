@@ -386,8 +386,8 @@ test("escape from a browse page the switcher opened goes back to the switcher, e
         session.sendText("switch model"); await session.waitForVisiblePane("Switch model");
         session.sendKey("Enter"); await session.waitForVisiblePane("models land here");
         session.sendKey("C-k"); await session.waitForVisiblePane("Filter and sort");
-        session.sendKey("C-g"); await session.waitForVisiblePane("Browse models · Recommended");
-        session.sendKey("C-g"); await session.waitForVisiblePane("Browse models · All connected");
+        session.sendKey("C-g"); await session.waitForVisiblePane("● Recommended");
+        session.sendKey("C-g"); await session.waitForVisiblePane("● All connected");
         session.sendKey("Down"); await session.waitForVisiblePane("⏎ favorite");
         session.sendKey("Enter");
         await session.waitForVisiblePane("⏎ unfavorite");
@@ -448,8 +448,8 @@ test("Ctrl+K opens the manage menu and Escape restores the browse page untouched
         // With no row highlighted the menu offers nothing model specific.
         expect(session.captureVisiblePane()).not.toContain("extra variants");
         session.sendKey("Escape"); await session.waitForVisiblePane("No favorites yet");
-        session.sendKey("C-g"); await session.waitForVisiblePane("Browse models · Recommended");
-        session.sendKey("C-g"); await session.waitForVisiblePane("All connected models");
+        session.sendKey("C-g"); await session.waitForVisiblePane("● Recommended");
+        session.sendKey("C-g"); await session.waitForVisiblePane("● All connected");
         session.sendText("open"); await session.settle();
         const before = session.captureVisiblePane();
         expect(before).toContain("Ctrl+K manage highlighted model");

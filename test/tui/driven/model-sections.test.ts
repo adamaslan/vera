@@ -22,10 +22,10 @@ test("browse keeps the search text while Tab walks its sections, and Enter favor
     try {
         await session.waitForVisiblePane("Start a conversation");
         session.sendText("/models"); session.sendKey("Enter");
-        await session.waitForVisiblePane("Browse models · Favorites");
+        await session.waitForVisiblePane("● Favorites");
         await session.waitForVisiblePane("No favorites yet");
-        session.sendKey("C-g"); await session.waitForVisiblePane("Browse models · Recommended");
-        session.sendKey("C-g"); await session.waitForVisiblePane("Browse models · All connected models");
+        session.sendKey("C-g"); await session.waitForVisiblePane("● Recommended");
+        session.sendKey("C-g"); await session.waitForVisiblePane("● All connected");
         session.sendText("oe"); await session.settle(); session.sendKey("Left"); session.sendText("n");
         await session.waitForVisiblePane("Search all connected models");
         expect(session.captureVisiblePane()).toContain("One");

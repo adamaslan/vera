@@ -27,7 +27,7 @@ test("the model picker's refresh key asks the provider and shows the new list", 
 
         // The page opens on Favorites, and the catalog rows are under All.
         session.sendKey("C-g");
-        await session.waitForVisiblePane("Browse models · Recommended");
+        await session.waitForVisiblePane("● Recommended");
         session.sendKey("C-g");
         await session.waitForVisiblePane("One");
         session.sendKey("C-r");
