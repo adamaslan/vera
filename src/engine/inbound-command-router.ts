@@ -233,7 +233,6 @@ interface QueueRelease {
 
 interface ActiveQueueTurn {
     readonly releaseId: number;
-    readonly releaseMode: QueueReleaseMode;
     readonly final: boolean;
     readonly queuedPrompt: boolean;
 }
@@ -529,7 +528,6 @@ export class InboundCommandRouter {
         this.activeTurn = controller;
         this.activeQueueTurn = {
             releaseId: claimedRelease.id,
-            releaseMode: claimedRelease.mode,
             final: claimedRelease.mode === "all"
                 && claimedItem.prompt !== undefined
                 ? true
@@ -591,7 +589,7 @@ export class InboundCommandRouter {
         if (terminal !== "completed") {
             this.release = undefined;
         } else if (active.final) {
-            this.finishRelease(active.releaseMode);
+            this.finishRelease();
         }
         this.emitPromptQueue();
         this.signalTurnAvailable();
@@ -742,34 +740,16 @@ export class InboundCommandRouter {
             this.signalTurnAvailable();
             return;
         }
-        this.finishRelease(release.mode);
+        this.finishRelease();
         this.emitPromptQueue();
         this.signalTurnAvailable();
     }
 
-    private finishRelease(mode: QueueReleaseMode): void {
-        if (
-            mode === "direct"
-            || mode === "automatic"
-            || mode === "all"
-        ) {
-            const heldPromptIndex = this.queuedTurns.findIndex(
-                (queued) => queued.prompt !== undefined,
-            );
-            const automaticBoundaryIndex = heldPromptIndex === -1
-                ? this.queuedTurns.length - 1
-                : heldPromptIndex - 1;
-            if (automaticBoundaryIndex < 0) {
-                this.release = undefined;
-                return;
-            }
-            this.release = this.newRelease(
-                "automatic",
-                this.queuedTurns[automaticBoundaryIndex]!,
-            );
-            return;
-        }
-        this.release = undefined;
+    private finishRelease(): void {
+        const next = this.queuedTurns[0];
+        this.release = next === undefined
+            ? undefined
+            : this.newRelease("automatic", next);
     }
 
     private releasedPromptActive(): boolean {
