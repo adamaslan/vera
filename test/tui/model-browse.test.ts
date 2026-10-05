@@ -408,10 +408,11 @@ test("reduced catalogs hide old entries without hiding kept models or search res
         { ...rows[2]!, pooledRank: undefined, hiddenByDefault: "superseded" as const }];
     let state = chooseScope(modelBrowse({ ...base, allOptions: options }, "browse"));
     expect(browseMatches(state).map((row) => row.model)).toEqual(["a", "b"]);
-    expect(handleModelBrowseKey(state, { name: "k", ctrl: true }).state?.options.find((row) => row.value === "variants")?.label).toBe("Show extra variants and older models");
+    const listMenu = (at: TuiSettingsPickerState) => handleModelBrowseKey({ ...at, modelFocus: "more" }, { name: "enter" }).state;
+    expect(listMenu(state)?.options.find((row) => row.value === "variants")?.label).toBe("Show extra variants and older models");
     state = handleModelBrowseKey(state, { name: "a", ctrl: true }).state!;
     expect(browseMatches(state)).toHaveLength(3);
-    expect(handleModelBrowseKey(state, { name: "k", ctrl: true }).state?.options.find((row) => row.value === "variants")?.label).toBe("Hide extra variants and older models");
+    expect(listMenu(state)?.options.find((row) => row.value === "variants")?.label).toBe("Hide extra variants and older models");
     state = handleModelBrowseKey(state, { name: "a", ctrl: true }).state!;
     const search = updateTuiSettingsPickerSearch(state, "gamma").state!;
     expect(search.options[search.selectedIndex]?.model).toBe("c");

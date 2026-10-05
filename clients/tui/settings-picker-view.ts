@@ -913,7 +913,7 @@ function renderModelMenu(
         content: subtitle, width: "100%", height: subtitleRows, wrapMode: "char",
         selectable: false, fg: TUI_TEXT, marginTop: 1,
     }));
-    const helper = state.title === "Manage models" ? state.options[state.selectedIndex]?.description : undefined;
+    const helper = state.manageTarget !== undefined ? state.options[state.selectedIndex]?.description : undefined;
     const helperRows = helper ? 2 : 0;
     const rowHeight = renderer.width < 64 ? 2 : 1;
     const hasSlider = state.options.some((option) => option.value === "cutoff");
@@ -932,9 +932,7 @@ function renderModelMenu(
             fg(TUI_MUTED)(option.label.slice(0, separator + 2)),
             fg(TUI_TEXT)(option.label.slice(separator + 2)),
         ]) : option.label;
-        const targetAction = state.title === "Manage models" && option.value === "library" && subtitleRows > 0;
-        const afterTarget = state.title === "Manage models" && visible[position - 1]?.option.value === "library";
-        const marginTop = targetAction ? 0 : position === 0 || option.value === "clear_filters" || afterTarget ? 1 : 0;
+        const marginTop = position === 0 || option.value === "clear_filters" ? 1 : 0;
         const row = new TextRenderable(renderer, {
             content, width: "100%", height: rowHeight, overflow: "hidden", marginTop,
             selectable: false, fg: active ? TUI_SELECTION_TEXT : TUI_TEXT,

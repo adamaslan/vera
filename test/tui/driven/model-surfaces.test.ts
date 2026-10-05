@@ -71,12 +71,14 @@ test("the manage menu carries verify all, so no chord is the only way in", async
         session.sendText("/models");
         session.sendKey("Enter");
         await session.waitForVisiblePane("Browse models");
-        session.sendKey("C-k");
-        const menu = await session.waitForVisiblePane("Manage models");
+        for (let step = 0; step < 4; step += 1) session.sendKey("Tab");
+        await session.waitForVisiblePane("⏎ manage models");
+        session.sendKey("Enter");
+        const menu = await session.waitForVisiblePane("Refresh model catalog");
         const rows = menu.split("\n").map((line) => line.trim());
         const at = rows.indexOf("Verify favorites");
         expect(at).toBeGreaterThan(0);
-        const first = rows.findIndex((line) => line === "Remove from favorites");
+        const first = rows.findIndex((line) => line === "Refresh model catalog");
         // The card prints a blank line between groups, so count rows, not lines.
         const steps = rows.slice(first, at).filter((line) => line !== "").length;
         for (let step = 0; step < steps; step += 1) session.sendKey("Down");
@@ -451,13 +453,16 @@ test("Ctrl+K opens the manage menu and Escape restores the browse page untouched
         session.sendText("open"); await session.settle();
         const before = session.captureVisiblePane();
         expect(before).toContain("Ctrl+K manage highlighted model");
-        session.sendKey("C-k"); await session.waitForVisiblePane("Selected: One · openrouter");
+        session.sendKey("C-k"); await session.waitForVisiblePane("One · openrouter");
+        expect(session.captureVisiblePane()).not.toContain("Refresh model catalog");
         session.sendKey("Escape"); await session.waitForVisiblePane("Browse models");
         await session.settle();
         expect(session.captureVisiblePane()).toBe(before);
-        session.sendKey("C-k"); await session.waitForVisiblePane("Show extra variants and older models");
+        for (let step = 0; step < 4; step += 1) session.sendKey("Tab");
+        await session.waitForVisiblePane("⏎ manage models");
+        session.sendKey("Enter"); await session.waitForVisiblePane("Show extra variants and older models");
         session.sendKey("Down"); session.sendKey("Enter");
         await session.waitForVisiblePane("Browse models");
-        session.sendKey("C-k"); await session.waitForVisiblePane("Hide extra variants and older models");
+        session.sendKey("Enter"); await session.waitForVisiblePane("Hide extra variants and older models");
     } finally { await session.close(); }
 }, 15_000);

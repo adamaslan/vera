@@ -164,8 +164,8 @@ You are asked to choose again only when it does not.
 
 ## Refresh or recover a connection
 
-Choose **Refresh model catalog** from Manage models (Ctrl+K on the browse page)
-to reload connected catalogs. For a ChatGPT subscription, Vera asks OpenAI for
+Choose **Refresh model catalog** from Manage models (the row under the list on
+the browse page) to reload connected catalogs. For a ChatGPT subscription, Vera asks OpenAI for
 the current model list using your sign-in. A brief overlay types catalogs refreshed, new
 models, and any failures, then a tick. Press Escape to close it when no
 dialog is open;
@@ -221,7 +221,7 @@ any picker control moves into Search.
 | Ctrl+R | | Rename the highlighted model. |
 | Ctrl+Y | | Verify the highlighted model. |
 | Ctrl+E | | Configure providers. |
-| Ctrl+K | | Open Manage models for the highlighted model. |
+| Ctrl+K | | Open actions for the highlighted model. |
 | Ctrl+G | | Toggle Favorites / All connected. |
 | Ctrl+D / Ctrl+U | Move half a page down / up. | Move half a page down / up. |
 | Space in the list | | Fold or unfold a provider group. |
@@ -233,9 +233,12 @@ Enter to switch. In the model page's Search, Left/Right move the caret and
 Space enters a space. Arrows that have no action in the current control move
 focus to another control.
 
-Manage models includes **Add/remove favorites**, defaults, refresh, and provider
-configuration. Opening its favorites editor does not change membership until
-you make a choice there.
+Ctrl+K on a model opens actions for that model only: add or remove the
+favorite, verify it, and request options where the provider has them. The
+**Manage models** row under the list holds actions for the whole list:
+refresh, **Edit favorites**, verify favorites, defaults, and provider
+configuration. Opening Edit favorites does not change membership until you
+make a choice there.
 
 ## Command-line reference
 
