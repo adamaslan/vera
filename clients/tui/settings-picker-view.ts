@@ -763,6 +763,10 @@ const MODEL_FILTER_LABEL = "Filter Models: ";
 const MODEL_SORT_WIDTH = 20;
 // A blank line and the rule between the provider groups and the actions under them.
 const PROVIDER_ACTION_RULE_LINES = 2;
+// A "more above" or "more below" line and the blank line between it and the list.
+const MORE_LINE_LINES = 2;
+// A sticky group heading and the cursor row.
+const MORE_LINES_MIN_ROWS = 2;
 
 function browseScopeLayout(renderer: RenderContext, state: TuiSettingsPickerState, railInset = 0) {
     const width = pickerContentWidth(renderer, state, railInset);
@@ -1323,13 +1327,18 @@ export function renderListPickerRows(
             && state.options.some((option) => option.action === true)
         ? PROVIDER_ACTION_RULE_LINES
         : 0;
-    const rows = windowedDisplayRows(
-        listDisplayRows(state),
-        state.selectedIndex,
-        tab === "all"
-            ? Math.min(availableRows, MODEL_ALL_MAX_ROWS)
-            : Math.max(1, availableRows - sessionGapLines - providerRuleLines),
-    );
+    const allRows = listDisplayRows(state);
+    const rowBudget = tab === "all"
+        ? Math.min(availableRows, MODEL_ALL_MAX_ROWS)
+        : Math.max(1, availableRows - sessionGapLines - providerRuleLines);
+    // The action rule costs lines only when the window reaches the actions.
+    const withoutRule = providerRuleLines > 0
+        ? windowedDisplayRowsWithRoom(allRows, state.selectedIndex, rowBudget + providerRuleLines)
+        : undefined;
+    const { rows, hidden, style: moreStyle } = withoutRule !== undefined
+            && !withoutRule.rows.some((row) => row.kind === "option" && row.option.action === true)
+        ? withoutRule
+        : windowedDisplayRowsWithRoom(allRows, state.selectedIndex, rowBudget);
     let firstHeading = true;
     let lines = 0;
     const activityWidth = Math.max(0, ...rows.map((row) =>
@@ -1541,6 +1550,17 @@ export function renderListPickerRows(
         nodes.push(header);
         lines += 1;
     }
+    const moreLine = (text: string, margin: "above" | "below" | "none"): void => {
+        const more = new TextRenderable(renderer, {
+            content: text, fg: TUI_MUTED, width: rowWidth, height: 1, selectable: false,
+            ...(margin === "above" ? { marginBottom: 1 } : margin === "below" ? { marginTop: 1 } : {}),
+        });
+        modelTree.add(more);
+        nodes.push(more);
+    };
+    if (!stackedPage && hidden.above > 0) {
+        moreLine(`↑ ${hidden.above} more above`, moreStyle === "spaced" ? "above" : "none");
+    }
     (stackedPage ? [] : rows).forEach((row, position) => {
         const previous = rows[position - 1];
         if (
@@ -1567,6 +1587,10 @@ export function renderListPickerRows(
         modelTree.add(node);
         nodes.push(node);
     });
+    if (!stackedPage && hidden.below > 0) {
+        moreLine(`↓ ${hidden.below} more below`, moreStyle === "spaced" ? "below" : "none");
+    }
+    if (!stackedPage) lines += moreLinesCost(hidden, moreStyle);
     if (allModelsInfoLines > 0) {
         const prices = allModelsPriceNode(
             renderer,
@@ -2140,6 +2164,76 @@ export function windowedDisplayRows(
     return cursorAtEnd
         ? [stuck, ...window.slice(1)]
         : [stuck, ...window.slice(0, -1)];
+}
+
+export type MoreLinesStyle = "spaced" | "tight";
+
+interface WindowWithRoom {
+    readonly rows: readonly PickerDisplayRow[];
+    readonly hidden: { readonly above: number; readonly below: number };
+    readonly style: MoreLinesStyle;
+}
+
+/** The window shrunk to make room for its "more" lines, which drop their spacing before they disappear. */
+export function windowedDisplayRowsWithRoom(
+    rows: readonly PickerDisplayRow[],
+    selectedIndex: number,
+    maxRows: number,
+): WindowWithRoom {
+    const plain = windowedDisplayRows(rows, selectedIndex, maxRows);
+    const plainHidden = hiddenOptionCounts(rows, plain);
+    if (plainHidden.above === 0 && plainHidden.below === 0) {
+        return { rows: plain, hidden: plainHidden, style: "spaced" };
+    }
+    const styles: readonly MoreLinesStyle[] = ["spaced", "tight"];
+    for (const style of styles) {
+        const fitted = fitMoreLines(rows, selectedIndex, maxRows, style);
+        if (fitted !== undefined) return fitted;
+    }
+    return { rows: plain, hidden: { above: 0, below: 0 }, style: "spaced" };
+}
+
+export function moreLinesCost(hidden: { readonly above: number; readonly below: number }, style: MoreLinesStyle): number {
+    const count = (hidden.above > 0 ? 1 : 0) + (hidden.below > 0 ? 1 : 0);
+    return count * (style === "spaced" ? MORE_LINE_LINES : 1);
+}
+
+function fitMoreLines(
+    rows: readonly PickerDisplayRow[],
+    selectedIndex: number,
+    maxRows: number,
+    style: MoreLinesStyle,
+): WindowWithRoom | undefined {
+    let window = windowedDisplayRows(rows, selectedIndex, maxRows);
+    // Shrinking can reveal a second hidden side, so the cost may grow once more.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const hidden = hiddenOptionCounts(rows, window);
+        const cost = moreLinesCost(hidden, style);
+        const showsCursor = window.some((row) => row.kind === "option" && row.index === selectedIndex);
+        if (window.length + cost <= maxRows) {
+            return showsCursor ? { rows: window, hidden, style } : undefined;
+        }
+        if (maxRows - cost < MORE_LINES_MIN_ROWS) return undefined;
+        window = windowedDisplayRows(rows, selectedIndex, maxRows - cost);
+    }
+    return undefined;
+}
+
+/** How many options the window leaves out on each side. Group headings are not counted. */
+export function hiddenOptionCounts(
+    rows: readonly PickerDisplayRow[],
+    shown: readonly PickerDisplayRow[],
+): { readonly above: number; readonly below: number } {
+    const visible = new Set(shown);
+    const firstShown = rows.findIndex((row) => row.kind === "option" && visible.has(row));
+    let above = 0;
+    let below = 0;
+    rows.forEach((row, position) => {
+        if (row.kind !== "option" || visible.has(row)) return;
+        if (firstShown === -1 || position < firstShown) above += 1;
+        else below += 1;
+    });
+    return { above, below };
 }
 
 export function isHeadingRow(row: PickerDisplayRow | undefined): boolean {

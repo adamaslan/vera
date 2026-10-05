@@ -4394,6 +4394,37 @@ test("a rule divides the provider groups from the actions under them", async () 
     expect(searchedFrame.split("\n").filter((line) => /─{20,}/.test(line))).toHaveLength(1);
 });
 
+test("a cut-off list says how many rows sit above and below it", async () => {
+    const many = [...PROVIDER_ROWS, ...Array.from({ length: 12 }, (_, n) => ({
+        id: `crow-${n}`, label: `crow-${n}`, group: "Added in config" as const, hint: "http://127.0.0.1:8080/v1",
+        hasCredential: true, answerState: "connected" as const, declared: true,
+    }))];
+    const pane = startTuiProviderPicker(many, { selected: "crow-6" });
+    const frame = await pickerFrame(pane, 120, 30);
+    const lines = frame.split("\n");
+    const above = lines.findIndex((line) => /↑ \d+ more above/.test(line));
+    const below = lines.findIndex((line) => /↓ \d+ more below/.test(line));
+
+    expect(above).toBeGreaterThan(-1);
+    expect(below).toBeGreaterThan(above);
+    expect(frame).toContain("crow-6");
+    const shown = pane.options.filter((option) =>
+        lines.some((line) => line.trim().split(/\s{2,}/)[0] === option.label.trim())).length;
+    const count = (line: string) => Number(/(\d+) more/.exec(line)![1]);
+    expect(shown + count(lines[above]!) + count(lines[below]!)).toBe(pane.options.length);
+
+    // Short terminals keep the highlighted row and the lines, without their spacing.
+    for (const height of [26, 22, 14]) {
+        const short = await pickerFrame(pane, 120, height);
+        expect(short).toContain("crow-6");
+        expect(short).toMatch(/↑ \d+ more above/);
+        expect(short).toMatch(/↓ \d+ more below/);
+    }
+
+    // A list that fits says nothing.
+    expect(await pickerFrame(startTuiProviderPicker(PROVIDER_ROWS), 120, 40)).not.toMatch(/more (above|below)/);
+});
+
 test("Refresh providers is a visible action that preserves the provider list", async () => {
     const pane = startTuiProviderPicker(PROVIDER_ROWS, { selected: TUI_REFRESH_PROVIDERS_VALUE });
     const frame = await pickerFrame(pane, 151, 36);
