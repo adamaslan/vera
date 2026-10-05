@@ -1684,7 +1684,7 @@ export function createConfiguredBuiltinTuiCommandRegistry(
         action: { type: "open_model_browse" },
         palette: {
             name: "models",
-            label: "Browse models",
+            label: "Compare models",
             description: "scores, prices, filters and sort across every model",
             group: "Settings",
             slashName: "models",
