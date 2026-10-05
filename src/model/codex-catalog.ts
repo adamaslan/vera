@@ -1,51 +1,78 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
-
-import { writeProviderCatalogSnapshot } from "./catalog-cache.ts";
+import {
+    readProviderCatalogSnapshot,
+    writeProviderCatalogSnapshot,
+} from "./catalog-cache.ts";
 import type {
     CatalogModel,
     ProviderCatalog,
     ReasoningLevel,
 } from "./catalog-shape.ts";
-import { readRegularFileTextSync } from "../store/regular-file.ts";
+import {
+    refreshRejectedOpenAICodexAuthorization,
+    resolveOpenAICodexAuthorization,
+    type OpenAICodexAuthorization,
+    type OpenAICodexAuthorizationOptions,
+} from "../providers/openai-codex-oauth.ts";
 
 const PROVIDER = "openai-codex";
+const DEFAULT_BASE_URL = "https://chatgpt.com/backend-api/codex";
+// The server lists only models whose minimum client version is at or below
+// this, so a model newer than it stays hidden until it is raised.
+export const CODEX_CLIENT_VERSION = "99.0.0";
 
-export interface CodexCatalogRefreshOptions {
-    readonly cachePath?: string;
+export interface CodexCatalogFetchOptions extends OpenAICodexAuthorizationOptions {
+    readonly baseUrl?: string;
     readonly cacheDir?: string;
 }
 
-export function codexModelCachePath(): string {
-    return join(homedir(), ".codex", "models_cache.json");
+export function readCodexCatalog(cacheDir?: string): ProviderCatalog {
+    return readProviderCatalogSnapshot(
+        PROVIDER,
+        cacheDir === undefined ? {} : { cacheDir },
+    );
 }
 
-export function refreshCodexCatalog(
-    options: CodexCatalogRefreshOptions = {},
-): ProviderCatalog | undefined {
-    let raw: unknown;
-    try {
-        raw = JSON.parse(
-            readRegularFileTextSync(
-                options.cachePath ?? codexModelCachePath(),
-            ),
-        );
-    } catch {
-        return undefined;
+// Throws when the request fails, so a failed refresh never replaces the saved list.
+export async function fetchCodexCatalog(
+    options: CodexCatalogFetchOptions = {},
+): Promise<ProviderCatalog> {
+    const fetchRequest = options.fetch ?? globalThis.fetch;
+    const url = `${options.baseUrl ?? DEFAULT_BASE_URL}/models?client_version=${CODEX_CLIENT_VERSION}`;
+    const send = (authorization: OpenAICodexAuthorization): Promise<Response> => {
+        const headers: Record<string, string> = {
+            Authorization: `Bearer ${authorization.accessToken}`,
+            Accept: "application/json",
+            originator: "vera",
+        };
+        if (authorization.accountId !== undefined) {
+            headers["chatgpt-account-id"] = authorization.accountId;
+        }
+        return fetchRequest(url, { headers, signal: AbortSignal.timeout(10_000) });
+    };
+
+    const authorization = await resolveOpenAICodexAuthorization(options);
+    let response = await send(authorization);
+    if (response.status === 401) {
+        response = await send(await refreshRejectedOpenAICodexAuthorization(
+            authorization.accessToken,
+            options,
+        ));
+    }
+    if (!response.ok) {
+        throw new Error(`OpenAI Codex models returned ${response.status}`);
     }
 
-    const catalog = normalizeCodexModelCache(raw);
+    const catalog = {
+        ...normalizeCodexModelCache(await response.json()),
+        fetched_at: new Date().toISOString(),
+    };
     if (catalog.models.length === 0) {
-        return undefined;
+        throw new Error("OpenAI Codex listed no models");
     }
-
-    try {
-        writeProviderCatalogSnapshot(
-            catalog,
-            options.cacheDir === undefined ? {} : { cacheDir: options.cacheDir },
-        );
-    } catch {
-    }
+    writeProviderCatalogSnapshot(
+        catalog,
+        options.cacheDir === undefined ? {} : { cacheDir: options.cacheDir },
+    );
     return catalog;
 }
 

@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+    CODEX_CLIENT_VERSION,
+    fetchCodexCatalog,
     normalizeCodexModelCache,
-    refreshCodexCatalog,
 } from "../../src/model/codex-catalog.ts";
+import { createAuthStorage } from "../../src/providers/auth-storage.ts";
 import { readProviderCatalogSnapshot } from "../../src/model/catalog-cache.ts";
 import { effectiveCatalog } from "../../src/model/catalog.ts";
 
@@ -87,7 +89,7 @@ describe("normalizeCodexModelCache", () => {
     });
 });
 
-describe("refreshCodexCatalog", () => {
+describe("fetchCodexCatalog", () => {
     const directories: string[] = [];
 
     function scratch(): string {
@@ -96,66 +98,71 @@ describe("refreshCodexCatalog", () => {
         return directory;
     }
 
+    function signedIn(directory: string, accessToken = "access-1") {
+        const authStorage = createAuthStorage({ path: join(directory, "auth.json") });
+        authStorage.setCredential("openai-codex", {
+            type: "oauth",
+            token: JSON.stringify({
+                schema_version: 1,
+                access_token: accessToken,
+                refresh_token: "refresh-1",
+                expires_at: Date.now() + 3_600_000,
+                account_id: "account-1",
+            }),
+        });
+        return authStorage;
+    }
+
     afterEach(() => {
         while (directories.length > 0) {
             rmSync(directories.pop()!, { recursive: true, force: true });
         }
     });
 
-    test("republishes the Codex cache as a discovery snapshot", () => {
+    test("asks the Codex models endpoint as the signed-in account and saves the list", async () => {
         const directory = scratch();
-        const cachePath = join(directory, "models_cache.json");
-        writeFileSync(cachePath, JSON.stringify(fixture));
+        const seen: { url: string; headers: Record<string, string> }[] = [];
+        const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+            seen.push({ url: String(input), headers: init?.headers as Record<string, string> });
+            return Response.json(fixture);
+        }) as typeof globalThis.fetch;
 
-        const catalog = refreshCodexCatalog({ cachePath, cacheDir: directory });
-        const snapshot = readProviderCatalogSnapshot("openai-codex", {
-            cacheDir: directory,
+        const catalog = await fetchCodexCatalog({
+            authStorage: signedIn(directory), fetch, cacheDir: directory,
         });
 
-        expect(catalog?.models.length).toBeGreaterThan(0);
-        expect(snapshot.models.map((model) => model.id))
-            .toEqual(catalog!.models.map((model) => model.id));
-    });
-
-    test("a snapshot it wrote is what the catalog then reads", () => {
-        const directory = scratch();
-        const cachePath = join(directory, "models_cache.json");
-        writeFileSync(cachePath, JSON.stringify(fixture));
-
-        refreshCodexCatalog({ cachePath, cacheDir: directory });
+        expect(seen).toHaveLength(1);
+        expect(seen[0]!.url).toBe(`https://chatgpt.com/backend-api/codex/models?client_version=${CODEX_CLIENT_VERSION}`);
+        expect(seen[0]!.headers.Authorization).toBe("Bearer access-1");
+        expect(seen[0]!.headers["chatgpt-account-id"]).toBe("account-1");
+        expect(catalog.fetched_at).toBeDefined();
         const sol = effectiveCatalog("openai-codex", { cacheDir: directory })
             .models.find((model) => model.id === "gpt-5.6-sol");
-
-        // The point of the whole slice: a model named in no Vera file arrives
-        // with its levels, in the order every consumer expects.
         expect(sol?.label).toBe("GPT-5.6-Sol");
         expect(sol?.levels[0]?.id).toBe("ultra");
     });
 
-    test("a missing or unreadable cache is not an error", () => {
+    test("a failed or empty answer throws and keeps the saved list", async () => {
         const directory = scratch();
+        const authStorage = signedIn(directory);
+        await fetchCodexCatalog({ authStorage, cacheDir: directory,
+            fetch: (async () => Response.json(fixture)) as unknown as typeof globalThis.fetch });
+        const saved = readProviderCatalogSnapshot("openai-codex", { cacheDir: directory }).models.length;
 
-        expect(refreshCodexCatalog({
-            cachePath: join(directory, "absent.json"),
-            cacheDir: directory,
-        })).toBeUndefined();
-
-        const malformed = join(directory, "malformed.json");
-        writeFileSync(malformed, "{ not json");
-        expect(refreshCodexCatalog({ cachePath: malformed, cacheDir: directory }))
-            .toBeUndefined();
+        for (const answer of [new Response("down", { status: 503 }), Response.json({ models: [] })]) {
+            await expect(fetchCodexCatalog({ authStorage, cacheDir: directory,
+                fetch: (async () => answer) as unknown as typeof globalThis.fetch })).rejects.toThrow();
+        }
+        expect(readProviderCatalogSnapshot("openai-codex", { cacheDir: directory }).models)
+            .toHaveLength(saved);
     });
 
-    test("a cache with no usable models publishes nothing", () => {
+    test("signed out is an error, not an empty list", async () => {
         const directory = scratch();
-        const cachePath = join(directory, "models_cache.json");
-        writeFileSync(cachePath, JSON.stringify({ models: [] }));
-
-        expect(refreshCodexCatalog({ cachePath, cacheDir: directory }))
-            .toBeUndefined();
-        expect(
-            readProviderCatalogSnapshot("openai-codex", { cacheDir: directory })
-                .models,
-        ).toEqual([]);
+        await expect(fetchCodexCatalog({
+            authStorage: createAuthStorage({ path: join(directory, "auth.json") }),
+            cacheDir: directory,
+            fetch: (async () => Response.json(fixture)) as unknown as typeof globalThis.fetch,
+        })).rejects.toThrow();
     });
 });

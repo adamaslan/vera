@@ -108,8 +108,8 @@ import {
 import { migrateConfigPool } from "../model/pool-migration.ts";
 import { createPoolEffortPool } from "../model/effort-pool.ts";
 import {
-    refreshCodexCatalog,
-    type CodexCatalogRefreshOptions,
+    fetchCodexCatalog,
+    readCodexCatalog,
 } from "../model/codex-catalog.ts";
 import { OPENAI_CODEX_PROVIDER_ID } from "../providers/openai-codex-oauth.ts";
 import {
@@ -256,6 +256,8 @@ export interface StartResidentHostOptions {
     readonly startupLog?: HostLog;
     readonly startupFindings?: StartupFindings;
     readonly webRoot?: string;
+    // Catalog requests only; model turns keep their own adapters.
+    readonly catalogFetch?: typeof globalThis.fetch;
 }
 
 export interface HostHealth {
@@ -513,6 +515,7 @@ export async function startResidentHost(
             const config = currentConfig();
             return connectedProviderCatalogs(config, { authStorage })
                 .filter((provider) => isRefreshableProvider(provider.id, config)
+                    || (provider.id === OPENAI_CODEX_PROVIDER_ID && hasCodexCredential(authStorage))
                     || configuredProviders(config).find((row) => row.id === provider.id)?.protocol === "anthropic-messages")
                 .map((provider) => provider.id);
         },
@@ -536,11 +539,14 @@ export async function startResidentHost(
                         models = modelsFromConnectedCatalogs(config, models, { authStorage });
                         return models;
                     }
-                    // Codex has no models endpoint: its list is the cache file
-                    // the Codex CLI writes, so a refresh is a re-read.
                     if (provider === OPENAI_CODEX_PROVIDER_ID) {
+                        if (!hasCodexCredential(authStorage)) return undefined;
+                        const fetched = await fetchCodexCatalog({
+                            authStorage,
+                            ...(options.catalogFetch === undefined ? {} : { fetch: options.catalogFetch }),
+                        }).catch(() => undefined);
+                        if (fetched === undefined) return undefined;
                         const rows = discoveredCodexModels(config, { authStorage });
-                        if (rows.length === 0) return undefined;
                         models = withProviderRefreshability(
                             replaceProviderRows(models, provider, rows),
                             config,
@@ -1780,8 +1786,9 @@ function hasProviderCredential(
     }
 }
 
-export interface CodexDiscoveryOptions extends CodexCatalogRefreshOptions {
+export interface CodexDiscoveryOptions {
     readonly authStorage?: AuthStorage;
+    readonly cacheDir?: string;
 }
 
 export function discoveredCodexModels(
@@ -1795,8 +1802,7 @@ export function discoveredCodexModels(
         return [];
     }
 
-    const catalog = refreshCodexCatalog(options);
-    return catalog?.models.map((model) => ({
+    return readCodexCatalog(options.cacheDir).models.map((model) => ({
         provider: "openai-codex",
         model: model.id,
         label: model.label,
@@ -1804,7 +1810,7 @@ export function discoveredCodexModels(
         ...(model.context_window === undefined
             ? {}
             : { contextWindow: model.context_window }),
-    })) ?? [];
+    }));
 }
 
 function hasCodexCredential(authStorage?: AuthStorage): boolean {

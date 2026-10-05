@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -613,15 +613,15 @@ test(
             await mkdtemp(join(tmpdir(), "vera-codex-refresh-")),
         );
         const previousHome = process.env.VERA_HOME;
-        const previousUserHome = process.env.HOME;
         process.env.VERA_HOME = root;
-        await mkdir(join(root, ".codex"), { recursive: true });
-        await copyFile(
-            fileURLToPath(
-                new URL("../fixtures/codex-models-cache.json", import.meta.url),
-            ),
-            join(root, ".codex", "models_cache.json"),
-        );
+        const fixture = await readFile(fileURLToPath(
+            new URL("../fixtures/codex-models-cache.json", import.meta.url),
+        ), "utf8");
+        const asked: string[] = [];
+        const catalogFetch = (async (input: string | URL | Request) => {
+            asked.push(String(input));
+            return new Response(fixture, { headers: { "Content-Type": "application/json" } });
+        }) as typeof globalThis.fetch;
 
         let token: string | undefined;
         const authStorage = {
@@ -644,6 +644,7 @@ test(
             config: loadVeraConfig({ path: configPath }),
             createAdapter: () => adapter,
             authStorage,
+            catalogFetch,
             socketPath: join(root, "host.sock"),
             lockPath: join(root, "host.json"),
             sessionDirectory: join(root, "sessions"),
@@ -659,27 +660,31 @@ test(
             expect(before?.availableModels?.some(
                 (model) => model.provider === "openai-codex",
             )).toBe(false);
+            expect(before?.refreshableProviders).not.toContain("openai-codex");
 
-            // The cache Codex writes sits in the user's home, and the release
-            // stamp the host reads at startup sits there too.
-            process.env.HOME = root;
-            token = "signed-in-just-now";
+            token = JSON.stringify({
+                schema_version: 1,
+                access_token: "signed-in-just-now",
+                refresh_token: "refresh-1",
+                expires_at: Date.now() + 3_600_000,
+            });
             const refreshed = await host.registry.refreshCatalog(
                 agent.id,
                 "openai-codex",
             );
+            expect(asked.some((url) => url.includes("/backend-api/codex/models?client_version="))).toBe(true);
             expect(refreshed?.availableModels).toContainEqual(
                 expect.objectContaining({
                     provider: "openai-codex",
                     model: "gpt-5.6-sol",
                 }),
             );
+            const after = await host.registry.readHostModelSettings(root);
+            expect(after?.refreshableProviders).toContain("openai-codex");
         } finally {
             await host.close();
             if (previousHome === undefined) delete process.env.VERA_HOME;
             else process.env.VERA_HOME = previousHome;
-            if (previousUserHome === undefined) delete process.env.HOME;
-            else process.env.HOME = previousUserHome;
             await rm(root, { recursive: true, force: true });
         }
     },

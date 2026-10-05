@@ -165,7 +165,8 @@ You are asked to choose again only when it does not.
 ## Refresh or recover a connection
 
 Choose **Refresh model catalog** from Manage models (Ctrl+K on the browse page)
-to reload connected catalogs. A brief overlay types catalogs refreshed, new
+to reload connected catalogs. For a ChatGPT subscription, Vera asks OpenAI for
+the current model list using your sign-in. A brief overlay types catalogs refreshed, new
 models, and any failures, then a tick. Press Escape to close it when no
 dialog is open;
 otherwise it clears after a few seconds. Another overlay waits its turn.
