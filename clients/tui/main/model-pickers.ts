@@ -19,7 +19,7 @@ import { openGate, providerAnswerLabel, type OnboardingInput } from "../../../sr
 import { configuredProviders, findConfiguredProvider, isProviderConnected, type ProviderDescriptor } from "../../../src/providers/registry.ts";
 import { openFileInEditor, veraConfigPath } from "../../editor.ts";
 import { isHomeClient } from "../home-client.ts";
-import { closeSettingsPickerSurface, defaultLoginProvider, requestCatalogRefresh } from "../main.ts";
+import { closeSettingsPickerSurface, defaultLoginProvider, requestCatalogRefresh, showModeToast } from "../main.ts";
 import { focusedAgentClient, focusedAgentState } from "../main/agents-dials.ts";
 import { adoptStandingNudgesState } from "../main/chrome.ts";
 import { requestAgentSettings } from "../main/diagnostics-ops.ts";
@@ -724,9 +724,10 @@ export function openProviderPicker(rt: TuiRuntime,
             catalog: (id) => readProviderCatalogSnapshot(id),
         },
     );
+    const shownRows = rows.map((row) => rt.connectingProviders.has(row.id) ? { ...row, signingIn: true } : row);
     rt.settingsPicker = withTuiPickerParent(
         startTuiProviderPicker(
-            rows,
+            shownRows,
             {
                 ...options,
                 subtitle: options.subtitle ?? (connected.size ? undefined : "No provider connected. Choose one below, or add an endpoint of your own."),
@@ -804,34 +805,33 @@ export function connectProvider(rt: TuiRuntime,
         return "sign_in";
     }
     rt.connectingProviders.add(provider.id);
-    rt.state = appendTuiNotice(
-        rt.state,
-        `opening your browser to sign in to ${provider.label}…`,
-        "soft",
-    );
-    renderState(rt);
-    void (rt.dependencies.loginProvider ?? ((providerId: string, onAuthorizationUrl: (url: string) => void) => defaultLoginProvider(rt, providerId, onAuthorizationUrl)))(
+    // The list stays open so the row itself reports the sign-in when the user comes back.
+    const list = pane?.kind === "provider_actions" ? pane.parent : pane;
+    if (list?.kind === "provider") {
+        rt.settingsPicker = list;
+        refreshProviderPicker(rt);
+    }
+    showModeToast(rt, `Signing in to ${provider.label} in your browser…`);
+    void (rt.dependencies.loginProvider ?? ((providerId: string, onBrowserUnavailable: (url: string) => void) => defaultLoginProvider(rt, providerId, onBrowserUnavailable)))(
         provider.id,
         (url) => {
             rt.state = appendTuiNotice(
                 rt.state,
-                `browser didn't open? sign in here: ${url}`,
+                `Could not open a browser. Sign in to ${provider.label} here: ${url}`,
                 "soft",
             );
             renderState(rt);
         },
     ).then(() => {
         rt.connectingProviders.delete(provider.id);
-        rt.state = appendTuiNotice(
-            rt.state,
-            `✓ signed in to ${provider.label}`,
-            "success",
-        );
+        refreshProviderPicker(rt);
+        showModeToast(rt, `Signed in to ${provider.label}`);
         // The credential alone changes no list: the host only learns the
         // provider's models when it is asked to read them again.
         requestCatalogRefresh(rt, provider.id);
     }, (error: unknown) => {
         rt.connectingProviders.delete(provider.id);
+        refreshProviderPicker(rt);
         rt.state = appendTuiError(
             rt.state,
             `could not connect to ${provider.label}: ${

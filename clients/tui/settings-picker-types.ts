@@ -192,6 +192,7 @@ export interface TuiSettingsPickerOption {
     readonly group?: string;
     readonly hasCredential?: boolean;
     readonly answerState?: ProviderAnswerState;
+    readonly signingIn?: boolean;
     readonly action?: boolean;
     readonly declared?: boolean;
     readonly endpointEditable?: boolean;
@@ -249,6 +250,7 @@ export interface TuiProviderRow {
     readonly hint?: string;
     readonly hasCredential: boolean;
     readonly answerState?: ProviderAnswerState;
+    readonly signingIn?: boolean;
     readonly refreshable?: boolean;
     readonly localRuntime?: boolean;
     readonly declared?: boolean;

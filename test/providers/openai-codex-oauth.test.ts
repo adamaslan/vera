@@ -25,6 +25,7 @@ describe("OpenAI Codex OAuth", () => {
         let expectedState = "";
         let authorizationUrl = "";
         let tokenRequest: RequestInit | undefined;
+        let unavailable: string | undefined;
 
         const credentials = await loginOpenAICodex({
             authStorage,
@@ -38,7 +39,8 @@ describe("OpenAI Codex OAuth", () => {
                 };
             },
             onAuthorizationUrl: (url) => authorizationUrl = url,
-            openAuthorizationUrl: async () => {},
+            openAuthorizationUrl: async () => true,
+            onBrowserUnavailable: (url) => unavailable = url,
             fetch: (async (_input, init) => {
                 tokenRequest = init;
                 return Response.json({
@@ -67,11 +69,29 @@ describe("OpenAI Codex OAuth", () => {
             "http://localhost:1455/auth/callback",
         );
         expect(body.get("code")).toBe("authorization-code");
+        expect(unavailable).toBeUndefined();
         expect(credentials.account_id).toBe("account-1");
         expect(credentials.expires_at).toBe(2_000_000);
 
         const reloaded = readOpenAICodexCredentials(createAuthStorage({ path }));
         expect(reloaded).toEqual(credentials);
+    });
+
+    test("hands over the sign-in link only when no browser opens", async () => {
+        let unavailable: string | undefined;
+        const login = loginOpenAICodex({
+            authStorage: createAuthStorage({ path: join(mkdtempSync(join(tmpdir(), "vera-codex-")), "auth.json") }),
+            startCallback: () => ({
+                redirectUri: "http://localhost:1455/auth/callback",
+                code: new Promise<string>(() => {}),
+                close() {},
+            }),
+            openAuthorizationUrl: async () => false,
+            onBrowserUnavailable: (url) => unavailable = url,
+        });
+        void login;
+        await Bun.sleep(0);
+        expect(unavailable).toStartWith("https://auth.openai.com/oauth/authorize?");
     });
 
     test("refreshes an expired token and preserves an omitted refresh token", async () => {

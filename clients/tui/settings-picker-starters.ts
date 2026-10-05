@@ -923,6 +923,7 @@ export function startTuiProviderPicker(
             ...(provider.answerState === undefined
                 ? {}
                 : { answerState: provider.answerState }),
+            ...(provider.signingIn === true ? { signingIn: true } : {}),
             ...(provider.refreshable === true ? { refreshable: true } : {}),
             ...(provider.declared === true ? { declared: true } : {}),
             ...(provider.endpointEditable === true

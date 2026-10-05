@@ -8,6 +8,7 @@ import type { ClientCommand } from "../../../src/engine/protocol.ts";
 
 test("signing in to a provider asks for its model list", async () => {
     const commands: ClientCommand[] = [];
+    let finishSignIn = () => {};
     const session = await startTuiTestSession({
         home: mkdtempSync(join(tmpdir(), "vera-provider-sign-in-")),
         width: 120,
@@ -16,7 +17,10 @@ test("signing in to a provider asks for its model list", async () => {
             ...createTuiCatalogRefreshDependencies({
                 onCommand: (command) => commands.push(command),
             }),
-            loginProvider: async () => {},
+            loginProvider: async (_providerId, onBrowserUnavailable) => {
+                onBrowserUnavailable("https://auth.example/crow-sign-in");
+                await new Promise<void>((resolve) => finishSignIn = resolve);
+            },
         }),
     });
     try {
@@ -32,7 +36,14 @@ test("signing in to a provider asks for its model list", async () => {
         session.sendKey("Enter");
         await session.waitForVisiblePane("Set this provider up and read its catalog");
         session.sendKey("Enter");
-        await session.waitForVisiblePane("signed in to OpenAI Codex");
+        // The list stays open and the row reports the sign-in in progress.
+        await session.waitForVisiblePane("signing in…");
+        expect(session.captureVisiblePane()).toContain("Configure providers");
+        finishSignIn();
+        await session.waitForVisiblePane("Signed in to OpenAI Codex");
+        await session.settle();
+        expect(session.captureVisiblePane()).not.toContain("signing in…");
+        await session.waitForVisiblePane("Sign in to OpenAI Codex here: https://auth.example/crow-sign-in");
         expect(
             commands.filter((command) => command.type === "catalog_refresh"),
         ).toMatchObject([
