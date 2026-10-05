@@ -55,6 +55,7 @@ import {
 import { ToolRuntime } from "../../src/tools/runtime.ts";
 import { FauxAdapter } from "../support/faux-adapter.ts";
 import { InMemorySessionStore } from "../support/in-memory-session-store.ts";
+import { SessionStore } from "../../src/store/session-store.ts";
 import type {
     SessionMessageStore,
     StoredMessage,
@@ -218,6 +219,66 @@ test("send all supplies distinct user messages to one model turn", async () => {
         }),
     ]);
     expect(observedPrompts).toEqual(["alpha", "beta"]);
+});
+
+test("successful replies automatically run FIFO follow-ups and persist separate turns", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "vera-auto-follow-ups-"));
+    temporaryWorkspaces.push(workspace);
+    const sessionPath = join(workspace, "session.jsonl");
+    const store = await SessionStore.create(sessionPath, {
+        sessionId: "follow-ups",
+        cwd: workspace,
+    });
+    const channel = createInProcessChannel();
+    const events = new EngineEventBus();
+    const updates: AgentUpdate[] = [];
+    events.subscribe(createProtocolEncoder({ send: (update) => updates.push(update) }));
+    const requests: ModelRequest[] = [];
+    const faux = new FauxAdapter(["first reply", "second reply", "third reply"].map((text) => ({
+        role: "assistant",
+        content: [{ type: "text", text }],
+        source: { provider: "faux", api: "scripted", model: "test" },
+        usage: emptyUsage(),
+        stopReason: "stop",
+    })));
+    const adapter: ModelAdapter = {
+        stream(request) {
+            requests.push({ ...request, messages: structuredClone(request.messages) });
+            if (requests.length === 1) {
+                channel.client.send({ type: "prompt", content: "second" });
+                channel.client.send({ type: "prompt", content: "third" });
+            }
+            return faux.stream(request);
+        },
+    };
+    const state: RunTurnState = {
+        messages: [],
+        store,
+        toolRuntime: new ToolRuntime(workspace),
+        inbound: new InboundCommandRouter(channel.engine, events),
+        events,
+        hooks: new ToolHooks(),
+        approvalMode: "auto",
+    };
+    channel.client.send({ type: "prompt", content: "first" });
+    for (let index = 0; index < 3; index += 1) {
+        await runTurn(adapter, "test", state);
+    }
+    expect(requests.map((request) => request.messages.at(-1))).toEqual(
+        ["first", "second", "third"].map((text) => ({
+            role: "user",
+            content: [{ type: "text", text }],
+        })),
+    );
+    expect(updates.filter((update) => update.type === "turn_finished")).toHaveLength(3);
+    expect(updates.filter((update) => update.type === "prompt_queue").at(-1)).toMatchObject({
+        queue: { prompts: [], draining: false },
+    });
+    const reopened = await SessionStore.open(sessionPath);
+    expect(reopened.messages().map((message) => message.role)).toEqual([
+        "user", "assistant", "user", "assistant", "user", "assistant",
+    ]);
+    expect(reopened.messages()).toEqual(state.messages);
 });
 
 test("a failed send-all turn consumes its batch and holds later prompts", async () => {

@@ -91,19 +91,15 @@ test("plain abort holds queued prompts until an explicit release", async () => {
     ]);
 });
 
-test("send one fences later prompts and send all drains the claimed snapshot", async () => {
+test("send one resumes FIFO and send all batches the remaining snapshot", async () => {
     const channel = createInProcessChannel();
-    const router = new InboundCommandRouter(
-        channel.engine,
-        new EngineEventBus(),
-    );
-
+    const router = new InboundCommandRouter(channel.engine, new EngineEventBus());
     const firstTurn = router.startTurn();
     channel.client.send({ type: "prompt", content: "active" });
     const active = await firstTurn;
-    channel.client.send({ type: "prompt", content: "one" });
-    channel.client.send({ type: "prompt", content: "two" });
-    channel.client.send({ type: "prompt", content: "three" });
+    for (const content of ["one", "two", "three"]) {
+        channel.client.send({ type: "prompt", content });
+    }
     channel.client.send({ type: "release_queued_prompts", mode: "one" });
     await new Promise<void>((resolve) => {
         active.signal.addEventListener("abort", () => resolve(), { once: true });
@@ -112,31 +108,21 @@ test("send one fences later prompts and send all drains the claimed snapshot", a
 
     const one = await router.startTurn();
     expect(one.prompt.content).toBe("one");
+    expect(one.additionalPrompts).toBeUndefined();
     router.finishTurn();
 
-    const fenced = router.startTurn();
-    expect(await Promise.race([
-        fenced.then(() => "started" as const),
-        Bun.sleep(10).then(() => "held" as const),
-    ])).toBe("held");
-
     channel.client.send({ type: "release_queued_prompts", mode: "all" });
-    const batch = await fenced;
+    await Bun.sleep(0);
+    const batch = await router.startTurn();
     expect(batch.prompt.content).toBe("two");
-    expect(batch.additionalPrompts?.map((prompt) => prompt.content)).toEqual([
-        "three",
-    ]);
+    expect(batch.additionalPrompts?.map((prompt) => prompt.content)).toEqual(["three"]);
     channel.client.send({ type: "prompt", content: "later" });
     await Bun.sleep(0);
     router.finishTurn();
 
-    const later = router.startTurn();
-    expect(await Promise.race([
-        later.then(() => "started" as const),
-        Bun.sleep(10).then(() => "held" as const),
-    ])).toBe("held");
-    channel.client.send({ type: "release_queued_prompts", mode: "one" });
-    expect((await later).prompt.content).toBe("later");
+    const later = await router.startTurn();
+    expect(later.prompt.content).toBe("later");
+    expect(later.additionalPrompts).toBeUndefined();
     router.finishTurn();
 });
 
@@ -330,34 +316,99 @@ test("a plain stop consumes a send-all batch but holds later prompts", async () 
     router.finishTurn();
 });
 
-test("a natural boundary holds every queued prompt for an explicit release", async () => {
+test("natural completion starts queued prompts one at a time in FIFO order", async () => {
     const channel = createInProcessChannel();
-    const router = new InboundCommandRouter(
-        channel.engine,
-        new EngineEventBus(),
-    );
+    const events = new EngineEventBus();
+    const observed: EngineEvent[] = [];
+    events.subscribe((event) => observed.push(event));
+    const router = new InboundCommandRouter(channel.engine, events);
 
     const firstTurn = router.startTurn();
     channel.client.send({ type: "prompt", content: "active" });
-    await firstTurn;
+    const active = await firstTurn;
     channel.client.send({ type: "prompt", content: "alpha" });
     channel.client.send({ type: "prompt", content: "beta" });
     await Bun.sleep(0);
+    expect(active.signal.aborted).toBe(false);
     router.finishTurn();
 
-    const held = router.startTurn();
-    expect(await Promise.race([
-        held.then(() => "started" as const),
-        Bun.sleep(10).then(() => "held" as const),
-    ])).toBe("held");
-    channel.client.send({ type: "release_queued_prompts", mode: "all" });
-    const batch = await held;
-    expect(batch.prompt.content).toBe("alpha");
-    expect(batch.additionalPrompts?.map((prompt) => prompt.content)).toEqual([
-        "beta",
-    ]);
+    expect(observed.at(-1)).toEqual({
+        type: "prompt_queue_changed",
+        queue: {
+            prompts: [
+                { content: "alpha", state: "released" },
+                { content: "beta", state: "held" },
+            ],
+            draining: true,
+        },
+    });
+    const alpha = await router.startTurn();
+    expect(alpha.prompt.content).toBe("alpha");
+    expect(alpha.additionalPrompts).toBeUndefined();
+    channel.client.send({ type: "prompt", content: "gamma" });
+    await Bun.sleep(0);
+    router.finishTurn();
+
+    for (const content of ["beta", "gamma"]) {
+        const turn = await router.startTurn();
+        expect(turn.prompt.content).toBe(content);
+        expect(turn.additionalPrompts).toBeUndefined();
+        router.finishTurn();
+    }
+    expect(observed.at(-1)).toEqual({
+        type: "prompt_queue_changed",
+        queue: { prompts: [], draining: false },
+    });
+    channel.client.send({ type: "prompt", content: "fresh" });
+    expect((await router.startTurn()).prompt.content).toBe("fresh");
     router.finishTurn();
 });
+
+test("send all can interrupt an automatically started follow-up", async () => {
+    const channel = createInProcessChannel();
+    const router = new InboundCommandRouter(channel.engine, new EngineEventBus());
+    channel.client.send({ type: "prompt", content: "active" });
+    await router.startTurn();
+    for (const content of ["one", "two", "three"]) {
+        channel.client.send({ type: "prompt", content });
+    }
+    await Bun.sleep(0);
+    router.finishTurn();
+    const automatic = await router.startTurn();
+    expect(automatic.prompt.content).toBe("one");
+    channel.client.send({ type: "release_queued_prompts", mode: "all" });
+    await new Promise<void>((resolve) => {
+        automatic.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    router.finishTurn("aborted");
+    const batch = await router.startTurn();
+    expect(batch.prompt.content).toBe("two");
+    expect(batch.additionalPrompts?.map((prompt) => prompt.content)).toEqual(["three"]);
+    router.finishTurn();
+});
+
+for (const outcome of ["failed", "aborted"] as const) {
+    test(`an automatic follow-up that is ${outcome} holds the remaining FIFO`, async () => {
+        const channel = createInProcessChannel();
+        const router = new InboundCommandRouter(channel.engine, new EngineEventBus());
+        channel.client.send({ type: "prompt", content: "active" });
+        await router.startTurn();
+        channel.client.send({ type: "prompt", content: "one" });
+        channel.client.send({ type: "prompt", content: "two" });
+        await Bun.sleep(0);
+        router.finishTurn();
+        expect((await router.startTurn()).prompt.content).toBe("one");
+        router.finishTurn(outcome);
+        const pending = router.startTurn();
+        expect(await Promise.race([
+            pending.then(() => "started"),
+            Bun.sleep(10).then(() => "held"),
+        ])).toBe("held");
+        channel.client.send({ type: "release_queued_prompts", mode: "one" });
+        expect((await pending).prompt.content).toBe("two");
+        router.finishTurn();
+    });
+}
 
 test("send all batches ordinary prompts across queued controls", async () => {
     const channel = createInProcessChannel();
@@ -402,11 +453,6 @@ test("send all batches ordinary prompts across queued controls", async () => {
     const held = router.startTurn();
     await Bun.sleep(0);
     expect(selected).toBe("beta");
-    expect(await Promise.race([
-        held.then(() => "started" as const),
-        Bun.sleep(10).then(() => "held" as const),
-    ])).toBe("held");
-    channel.client.send({ type: "release_queued_prompts", mode: "one" });
     expect((await held).prompt.content).toBe("later");
     router.finishTurn();
 });
@@ -633,7 +679,7 @@ test("a pre-start abort fences prompts behind a non-turn queue item", async () =
     router.finishTurn();
 });
 
-test("send one applies following queue controls before fencing the next prompt", async () => {
+test("send one applies following queue controls before starting the next prompt", async () => {
     const channel = createInProcessChannel();
     let selected: string | undefined;
     const router = new InboundCommandRouter(
@@ -666,15 +712,10 @@ test("send one applies following queue controls before fencing the next prompt",
     expect((await router.startTurn()).prompt.content).toBe("one");
     router.finishTurn();
 
-    const fenced = router.startTurn();
+    const next = router.startTurn();
     await Bun.sleep(0);
     expect(selected).toBe("beta");
-    expect(await Promise.race([
-        fenced.then(() => "started" as const),
-        Bun.sleep(10).then(() => "held" as const),
-    ])).toBe("held");
-    channel.client.send({ type: "release_queued_prompts", mode: "one" });
-    expect((await fenced).prompt.content).toBe("two");
+    expect((await next).prompt.content).toBe("two");
     router.finishTurn();
 });
 

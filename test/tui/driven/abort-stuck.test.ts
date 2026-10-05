@@ -146,13 +146,6 @@ test("empty Enter releases every queued prompt in one model turn", async () => {
         session.sendKey("Enter");
         await session.waitForVisiblePane("+1");
 
-        const heldPane = await session.waitForVisiblePaneWhere(
-            (candidate) => candidate.includes("ready · Ctrl+P commands")
-                && candidate.includes("queued · first queued")
-                && candidate.includes("+1"),
-            "held queue after the active turn finishes",
-        );
-        expect(heldPane).not.toContain("BATCH OK");
         session.sendKey("Enter");
         const pane = await session.waitForVisiblePaneWhere(
             (candidate) => candidate.includes("ready · Ctrl+P commands")
@@ -213,8 +206,6 @@ test("empty Enter steers a released prompt that is still running", async () => {
         await session.waitForVisiblePane("+2");
 
         session.sendKey("Escape");
-        // The fence released the oldest prompt; the rest stay held and must
-        // still read as held while the queue drains.
         const draining = await session.waitForVisiblePaneWhere(
             (candidate) => candidate.includes("queued · second queued")
                 && candidate.includes("+1"),
@@ -248,52 +239,52 @@ test("empty Enter steers a released prompt that is still running", async () => {
     }
 }, 20_000);
 
-test("a typed prompt stays queued behind an idle send-one fence", async () => {
-    const home = mkdtempSync(join(tmpdir(), "vera-tui-idle-fence-"));
+test("queued prompts run automatically after replies without another key press", async () => {
+    const home = mkdtempSync(join(tmpdir(), "vera-tui-auto-queue-"));
     const sent: ClientCommand[] = [];
+    const requests: ModelRequest[] = [];
     const session = await startTuiTestSession({
         home,
         width: 100,
         height: 30,
         dependencies: () => slowTurnDependencies([
-            "ACTIVE",
-            "RELEASED",
-            "HELD",
-            "TYPED",
-        ], sent),
+            "ACTIVE DONE",
+            "FIRST DONE",
+            "SECOND DONE",
+        ], sent, false, requests),
     });
-
     try {
         await session.waitForVisiblePane("Start a conversation");
-        session.sendText("long answer please");
+        session.sendText("active");
         session.sendKey("Enter");
         await session.waitForVisiblePane("esc stop");
-
-        session.sendText("released first");
+        session.sendText("first queued");
         session.sendKey("Enter");
-        await session.waitForVisiblePane("queued · released first");
-        session.sendText("held first");
+        await session.waitForVisiblePane("queued · first queued");
+        session.sendText("second queued");
         session.sendKey("Enter");
         await session.waitForVisiblePane("+1");
-        session.sendKey("Escape");
 
-        await session.waitForVisiblePane("queued · held first");
-        await session.waitForVisiblePane("ready · Ctrl+P commands");
-        session.sendText("typed behind fence");
-        session.sendKey("Enter");
-        const pane = await session.waitForVisiblePane("+1");
-
-        expect(pane).toContain("queued · held first");
-        expect(pane).toContain("esc stop");
-        expect(pane).not.toContain("stopping…");
-        expect(sent.some((command) =>
-            command.type === "prompt"
-            && command.content === "typed behind fence"
-        )).toBe(true);
+        const pane = await session.waitForVisiblePaneWhere(
+            (candidate) => candidate.includes("SECOND DONE")
+                && candidate.includes("ready · Ctrl+P commands"),
+            "both follow-ups answered automatically and ready status",
+        );
+        expect(pane).toContain("ACTIVE DONE");
+        expect(pane).toContain("FIRST DONE");
+        expect(pane).not.toContain("queued ·");
+        expect(requests).toHaveLength(3);
+        expect(requests.map((request) => request.messages.at(-1))).toEqual(
+            ["active", "first queued", "second queued"].map((text) => ({
+                role: "user",
+                content: [{ type: "text", text }],
+            })),
+        );
+        expect(sent.some((command) => command.type === "release_queued_prompts")).toBe(false);
     } finally {
         await session.close();
     }
-}, 15_000);
+}, 20_000);
 
 test("a legacy host still advances its client-owned prompt queue", async () => {
     const home = mkdtempSync(join(tmpdir(), "vera-tui-legacy-queue-"));
@@ -380,15 +371,6 @@ function slowTurnDependencies(
             while (true) {
                 const update = await channel.client.receive(signal);
                 if (legacyQueue && update.type === "prompt_queue") continue;
-                if (legacyQueue && update.type === "turn_finished") {
-                    // A real pre-capability host auto-starts the prompt the
-                    // legacy client already submitted. The current engine
-                    // holds it, so the fixture reproduces that old boundary.
-                    channel.client.send({
-                        type: "release_queued_prompts",
-                        mode: "one",
-                    });
-                }
                 if (
                     legacyQueue
                     && update.type === "history"

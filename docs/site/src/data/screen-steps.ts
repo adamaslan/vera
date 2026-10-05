@@ -704,7 +704,7 @@ export const screenSteps: Record<ScreenStepsName, ScreenSteps> = {
             },
             {
                 keys: ['Enter'],
-                result: '`+1` means one more is waiting. Queued prompts wait for you, even after the turn ends.',
+                result: '`+1` means one more is waiting. Queued prompts run one at a time after each successful reply.',
                 composer: '',
                 composerFocused: true,
                 working: true,

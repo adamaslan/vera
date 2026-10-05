@@ -8,9 +8,9 @@ description: "Prepare follow-up prompts and choose when to send them."
 You can write a follow-up while Vera is working. Press Enter to add it to the
 current conversation's queue without interrupting the active turn.
 
-Queued prompts wait for you to send them, even when the current turn finishes.
-This lets you prepare several follow-ups and decide whether to send one or
-send them together.
+After a reply finishes successfully, Vera starts the oldest queued prompt.
+It continues through the queue one prompt and one reply at a time. You can
+also send waiting prompts together before the current reply finishes.
 
 ## Send queued prompts
 
@@ -26,7 +26,7 @@ With the composer empty and the queue visible:
 
 Sending the whole queue preserves prompt order as separate user messages and
 produces one response to the batch. Sending only the oldest leaves the rest
-queued.
+queued until that reply finishes successfully.
 
 If the composer contains text or an attachment, Enter adds that draft to the
 queue instead of sending existing queued prompts.
