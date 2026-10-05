@@ -595,7 +595,7 @@ export interface TuiDependencies {
     readonly healthEnv?: Readonly<Record<string, string | undefined>>;
     readonly loginProvider?: (
         providerId: string,
-        onAuthorizationUrl: (url: string) => void,
+        onBrowserUnavailable: (url: string) => void,
     ) => Promise<void>;
     readonly flightRecorder?: TuiFlightRecorder;
     readonly createRenderer?: () => Promise<CliRenderer>;

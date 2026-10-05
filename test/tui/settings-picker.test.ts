@@ -3752,6 +3752,15 @@ test("fixed subscription endpoints retain reconnect without unsupported actions"
     });
 });
 
+test("a subscription that is not connected offers Connect alone, not Reconnect too", () => {
+    const rows = PROVIDER_ROWS.map((row) => row.id === "openai-codex"
+        ? { ...row, hasCredential: false, answerState: undefined }
+        : row);
+    const pane = startTuiProviderPicker(rows, { selected: "openai-codex" });
+    const actions = handleTuiSettingsPickerKey(pane, { name: "enter" }).state!;
+    expect(actions.options.map((row) => row.label)).toEqual(["Connect"]);
+});
+
 test("a shipped row's endpoint opens on the chord, and Codex's does not", () => {
     const pane = startTuiProviderPicker(PROVIDER_ROWS, { selected: "ollama" });
     const chord = { name: "r", ctrl: true, shift: true };

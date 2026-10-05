@@ -44,8 +44,10 @@ connection or an unsupported URL scheme is also reported here.
 ## Subscription sign-in
 
 Choose the subscription connection in **Configure providers** and follow the
-sign-in instructions in your browser. To sign in again, open the connection's
-actions and choose **Reconnect**.
+sign-in instructions in your browser. The list stays open and the row reads
+`signing in…` until the browser finishes. If no browser opens, Vera prints the
+sign-in link instead. To sign in again, open the connection's actions and
+choose **Reconnect**.
 
 Saved authentication lives in `~/.vera/machine/auth.json`. Manage it through
 the provider screen.

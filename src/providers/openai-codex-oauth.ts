@@ -52,7 +52,9 @@ export interface OpenAICodexLoginOptions {
     readonly now?: () => number;
     readonly signal?: AbortSignal;
     readonly onAuthorizationUrl?: (url: string) => void;
-    readonly openAuthorizationUrl?: (url: string) => Promise<void>;
+    readonly onBrowserUnavailable?: (url: string) => void;
+    // Resolves false when no browser could be started.
+    readonly openAuthorizationUrl?: (url: string) => Promise<boolean>;
     readonly startCallback?: (
         state: string,
         signal?: AbortSignal,
@@ -98,7 +100,10 @@ export async function loginOpenAICodex(
     options.onAuthorizationUrl?.(authorizationUrl);
 
     try {
-        await (options.openAuthorizationUrl ?? openBrowser)(authorizationUrl);
+        // Not awaited: some openers only return once the browser exits.
+        void (options.openAuthorizationUrl ?? openBrowser)(authorizationUrl).then((opened) => {
+            if (!opened) options.onBrowserUnavailable?.(authorizationUrl);
+        });
         const code = await callback.code;
         const tokens = await exchangeAuthorizationCode(
             fetchRequest,
@@ -545,15 +550,17 @@ function startOpenAICodexCallback(
     };
 }
 
-async function openBrowser(url: string): Promise<void> {
+async function openBrowser(url: string): Promise<boolean> {
     const command = process.platform === "darwin"
         ? ["open", url]
         : process.platform === "win32"
             ? ["cmd", "/c", "start", "", url]
             : ["xdg-open", url];
     try {
-        Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
+        const opener = Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
+        return await opener.exited === 0;
     } catch {
+        return false;
     }
 }
 

@@ -1366,6 +1366,7 @@ export function optionMeta(
         if (option.action === true) return [{ text: "\u203a" }];
         // The three words, not a colour and not a boolean: a stored key that
         // has never answered is not a working provider.
+        if (option.signingIn === true) return [{ text: "signing in…", tone: "detail" }];
         if (option.answerState === undefined) return undefined;
         return [{
             text: option.answerState,

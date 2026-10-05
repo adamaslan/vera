@@ -103,12 +103,12 @@ export function forgetProviderCredential(rt: TuiRuntime, candidate: {
 
 export async function defaultLoginProvider(rt: TuiRuntime, 
     providerId: string,
-    onAuthorizationUrl: (url: string) => void,
+    onBrowserUnavailable: (url: string) => void,
 ): Promise<void> {
     if (providerId !== "openai-codex") {
         throw new Error(`No sign-in flow for provider ${providerId}`);
     }
-    await loginOpenAICodex({ authStorage: rt.authStorage, onAuthorizationUrl });
+    await loginOpenAICodex({ authStorage: rt.authStorage, onBrowserUnavailable });
 }
 
 export function openProviderEndpointForm(rt: TuiRuntime, 
