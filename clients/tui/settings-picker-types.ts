@@ -327,6 +327,7 @@ export interface TuiSettingsPickerState {
     readonly queryCursor?: number;
     readonly title?: string;
     readonly subtitle?: string;
+    readonly manageTarget?: "model" | "list";
     readonly initialTheme?: TuiThemeName;
     readonly initialModel?: string;
     readonly providerCatalogs?: readonly ProviderCatalogState[];

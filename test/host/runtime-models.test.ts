@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +17,8 @@ import {
     replaceProviderRows,
 } from "../../src/host/runtime.ts";
 import { availableReasoningEfforts } from "../../src/engine/model-settings.ts";
-import { readProviderCatalogSnapshot } from "../../src/model/catalog-cache.ts";
+import { readProviderCatalogSnapshot, writeProviderCatalogSnapshot } from "../../src/model/catalog-cache.ts";
+import { normalizeCodexModelCache } from "../../src/model/codex-catalog.ts";
 
 test("Ollama model metadata exposes its declared context window", () => {
     expect(ollamaContextWindow({
@@ -112,15 +113,11 @@ const codexConfig = {
     approval_mode: "ask",
 } as unknown as VeraConfig;
 
-function codexFixture(directory: string): string {
-    const cachePath = join(directory, "models_cache.json");
-    copyFileSync(
-        fileURLToPath(
-            new URL("../fixtures/codex-models-cache.json", import.meta.url),
-        ),
-        cachePath,
-    );
-    return cachePath;
+function codexFixture(directory: string): void {
+    const raw: unknown = JSON.parse(readFileSync(fileURLToPath(
+        new URL("../fixtures/codex-models-cache.json", import.meta.url),
+    ), "utf8"));
+    writeProviderCatalogSnapshot(normalizeCodexModelCache(raw), { cacheDir: directory });
 }
 
 function stubAuth(token: string | undefined): AuthStorage {
@@ -135,9 +132,9 @@ function stubAuth(token: string | undefined): AuthStorage {
 
 test("Codex models reach the runnable list with their catalog levels", () => {
     const directory = mkdtempSync(join(tmpdir(), "vera-runtime-codex-"));
+    codexFixture(directory);
     try {
         const models = discoveredCodexModels(codexConfig, {
-            cachePath: codexFixture(directory),
             cacheDir: directory,
             authStorage: stubAuth("stored-codex-credential"),
         });
@@ -163,9 +160,9 @@ test("Codex models reach the runnable list with their catalog levels", () => {
 
 test("no stored Codex credential means no Codex models offered", () => {
     const directory = mkdtempSync(join(tmpdir(), "vera-runtime-codex-"));
+    codexFixture(directory);
     try {
         expect(discoveredCodexModels(codexConfig, {
-            cachePath: codexFixture(directory),
             cacheDir: directory,
             authStorage: stubAuth(undefined),
         })).toEqual([]);
@@ -175,8 +172,7 @@ test("no stored Codex credential means no Codex models offered", () => {
         expect(discoveredCodexModels(
             { ...codexConfig, provider: "openai-codex" } as VeraConfig,
             {
-                cachePath: codexFixture(directory),
-                cacheDir: directory,
+                    cacheDir: directory,
                 authStorage: stubAuth(undefined),
             },
         ).length).toBeGreaterThan(0);

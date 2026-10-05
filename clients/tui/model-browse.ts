@@ -21,12 +21,18 @@ export function nextBrowseScope(
 /** What the scope in front of you holds, and what Enter does to a row in it. */
 export function browseScopeCaption(tab: TuiModelPickerTab | undefined): string {
     if (tab === "all") {
-        return "Every model your providers offer. Press Ctrl+G to switch to Recommended, a shorter list.";
+        return "Every model your providers offer.";
     }
     if (tab === "recommended") {
-        return "A short list, picked by hand and refreshed daily. Press Ctrl+G to see every model.";
+        return "A short list, picked by hand and refreshed daily.";
     }
     return "Models you saved, in the order you added them. \u23ce removes one.";
+}
+
+/** Every scope in Ctrl+G order, the current one marked. A readout, not tabs: only Ctrl+G moves it. */
+export function browseScopeIndicator(tab: TuiModelPickerTab | undefined): string {
+    const current = tab ?? "pool";
+    return BROWSE_SCOPES.map((scope) => `${scope === current ? "●" : "○"} ${browseScopeLabel(scope)}`).join("  ");
 }
 
 export function browseScopeLabel(tab: TuiModelPickerTab | undefined): string {
@@ -263,44 +269,45 @@ export function modelBrowseScope(parent: TuiSettingsPickerState): TuiSettingsPic
         selectedIndex: Math.max(0, options.findIndex((row) => row.value === `scope:${parent.tab ?? "pool"}`)), query: "", parent };
 }
 
-export function modelBrowseMenu(parent: TuiSettingsPickerState): TuiSettingsPickerState {
+/** Ctrl+K on a model row acts on that model; the Manage models row acts on the whole list. */
+export function modelBrowseMenu(parent: TuiSettingsPickerState, target: "model" | "list" = "list"): TuiSettingsPickerState {
     const selected = parent.options[parent.selectedIndex];
+    if (target === "model" && selected?.provider !== undefined && selected.model !== undefined) {
+        const provider = parent.providerCatalogs?.find((row) => row.id === selected.provider)?.label ?? selected.provider;
+        const options: TuiSettingsPickerOption[] = [
+            { value: "library", label: selected.pooledRank === undefined ? "Add to favorites" : "Remove from favorites",
+                description: selected.pooledRank === undefined ? "Save for quick access" : "Remove saved shortcut" },
+            { value: "verify_selected", label: "Verify this model", description: "Check that it still answers" },
+            ...(parent.requestOptionsProviders?.[selected.provider] !== undefined
+                ? [{
+                    value: "request_options",
+                    label: "Request options",
+                    description: parent.requestOptionsProviders[selected.provider]
+                        ?.label ?? "Edit the request body",
+                }]
+                : []),
+        ];
+        return { kind: "model_menu", title: `${selected.label} · ${provider}`, manageTarget: "model",
+            options, allOptions: options, selectedIndex: 0, query: "", parent };
+    }
     const options: TuiSettingsPickerOption[] = [
-        ...(selected?.provider !== undefined && selected.model !== undefined
-            ? [{ value: "library", label: selected.pooledRank === undefined
-                ? "Add to favorites" : "Remove from favorites", description: selected.pooledRank === undefined ? "Save for quick access" : "Remove saved shortcut" }]
-            : []),
+        { value: "refresh", label: "Refresh model catalog", description: "Reload connected catalogs" },
         ...(parent.tab === "all" ? [{ value: "variants", label: parent.revealAll
             ? "Hide extra variants and older models" : "Show extra variants and older models", description: "Change catalog visibility" }] : []),
-        { value: "refresh", label: "Refresh model catalog", description: "Reload connected catalogs" },
-        { value: "manage_library", label: "Add/remove favorites", description: "Choose your saved models" },
-        ...(selected?.provider !== undefined && selected.model !== undefined
-            ? [{ value: "verify_selected", label: "Verify this model", description: "Check that it still answers" }]
-            : []),
-        ...(selected?.provider !== undefined
-            && parent.requestOptionsProviders?.[selected.provider] !== undefined
-            ? [{
-                value: "request_options",
-                label: "Request options",
-                description: parent.requestOptionsProviders[selected.provider]
-                    ?.label ?? "Edit the request body",
-            }]
-            : []),
+        { value: "manage_library", label: "Edit favorites", description: "Choose your saved models" },
         ...(parent.allOptions.some((row) => row.pooledRank !== undefined)
             ? [{ value: "verify", label: "Verify favorites", description: "Check that they still answer" }]
             : []),
         { value: "defaults", label: "Edit model defaults", description: "Choose models for roles" },
         { value: "providers", label: "Configure providers", description: "Manage provider connections" },
     ];
-    const provider = parent.providerCatalogs?.find((row) => row.id === selected?.provider)?.label ?? selected?.provider;
-    return { kind: "model_menu", title: "Manage models", options, allOptions: options,
-        ...(selected?.model !== undefined && provider !== undefined ? { subtitle: `Selected: ${selected.label} · ${provider}` } : {}),
-        selectedIndex: 0, query: "", parent };
+    return { kind: "model_menu", title: "Manage models", manageTarget: "list",
+        options, allOptions: options, selectedIndex: 0, query: "", parent };
 }
 
 export function handleModelBrowseMenuKey(state: TuiSettingsPickerState, key: TuiSettingsPickerKey): TuiSettingsPickerTransition {
     const parent = state.parent;
-    if (key.name === "escape" || key.name === "esc" || (state.title === "Manage models" && tuiBindingId("switch_model_picker", key) === "journey_more")) {
+    if (key.name === "escape" || key.name === "esc" || (state.manageTarget !== undefined && tuiBindingId("switch_model_picker", key) === "journey_more")) {
         return { state: parent, handled: true };
     }
     if (state.options[state.selectedIndex]?.value === "cutoff" && (key.name === "left" || key.name === "right")) {
@@ -499,7 +506,7 @@ export function handleModelBrowseKey(state: TuiSettingsPickerState, key: TuiSett
                 provider: selected.provider, model: selected.model } } : same;
     }
     const binding = tuiBindingId(managing ? "shortlist_picker" : "switch_model_picker", key);
-    if (binding === "journey_more") return { state: modelBrowseMenu(state), handled: true };
+    if (binding === "journey_more") return { state: modelBrowseMenu(state, "model"), handled: true };
     if (key.name === "escape" || key.name === "esc") return { state: state.parent, handled: true };
     if (!key.ctrl && !key.meta) {
         const arrowed = browseArrowKey(state, key);

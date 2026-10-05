@@ -85,35 +85,44 @@ test("the filter menu scrolls to its last action on a small terminal", async () 
     } finally { setup.renderer.destroy(); }
 });
 
-test("More returns to the exact picker, and only its listed actions can run", () => {
+test("Ctrl+K opens only the highlighted model's actions and returns to the exact picker", () => {
     for (const modelFocus of ["list", "intelligence"] as const) {
         const filtered = { ...base, tab: "all" as const, intelligenceCutoff: "1500" as const,
             query: "p", queryCursor: 0, selectedIndex: 1, modelFocus };
         const parent = { ...filtered, options: browseModels(filtered) };
-        let menu = handleTuiSettingsPickerKey(parent, more).state!;
+        const menu = handleTuiSettingsPickerKey(parent, more).state!;
         expect(menu.kind).toBe("model_menu");
-        expect(menu.options.map((row) => row.label)).toEqual(["Add to favorites", "Show extra variants and older models", "Refresh model catalog", "Add/remove favorites", "Verify this model", "Verify favorites", "Edit model defaults", "Configure providers"]);
-        menu = handleTuiSettingsPickerKey(menu, { name: "down" }).state!;
+        expect(menu.manageTarget).toBe("model");
+        expect(menu.options.map((row) => row.label)).toEqual(["Add to favorites", "Verify this model"]);
         expect(handleTuiSettingsPickerKey(menu, { name: "escape" }).state).toBe(parent);
         expect(handleTuiSettingsPickerKey(menu, more).state).toBe(parent);
         for (const key of [{ name: "s", ctrl: true }, { name: "y", ctrl: true }, { name: "tab" }, { name: "a" }]) {
             expect(handleTuiSettingsPickerKey(menu, key)).toEqual({ state: menu, handled: true });
         }
-        const revealed = handleTuiSettingsPickerKey(menu, { name: "enter" }).state!;
-        expect(revealed.revealAll).toBe(true);
-        expect(revealed.query).toBe(parent.query);
-        expect(revealed.queryCursor).toBe(0);
-        expect(revealed.modelFocus).toBe(modelFocus);
-        expect(revealed.intelligenceCutoff).toBe("1500");
-        expect(revealed.options[revealed.selectedIndex]?.value).toBe("p/b");
-        expect(handleTuiSettingsPickerKey(revealed, more).state?.options
-            .find((row) => row.value === "variants")?.label).toBe("Hide extra variants and older models");
-        menu = handleTuiSettingsPickerKey(menu, { name: "down" }).state!;
-        expect(handleTuiSettingsPickerKey(menu, { name: "enter" })).toEqual({ state: parent, handled: true, refreshAllCatalogs: true });
     }
     const libraryMenu = handleTuiSettingsPickerKey(base, more).state!;
-    expect(libraryMenu.options.map((row) => row.label)).toEqual(["Remove from favorites", "Refresh model catalog", "Add/remove favorites", "Verify this model", "Verify favorites", "Edit model defaults", "Configure providers"]);
+    expect(libraryMenu.title).toBe("Alpha · p");
+    expect(libraryMenu.options.map((row) => row.label)).toEqual(["Remove from favorites", "Verify this model"]);
     expect(handleTuiSettingsPickerKey(libraryMenu, { name: "escape" }).state).toBe(base);
+});
+
+test("the Manage models row opens only whole-list actions", () => {
+    const filtered = { ...base, tab: "all" as const, intelligenceCutoff: "1500" as const,
+        query: "p", queryCursor: 0, selectedIndex: 1 };
+    const parent = { ...filtered, options: browseModels(filtered), modelFocus: "more" as const };
+    let menu = handleTuiSettingsPickerKey(parent, { name: "enter" }).state!;
+    expect(menu.title).toBe("Manage models");
+    expect(menu.manageTarget).toBe("list");
+    expect(menu.options.map((row) => row.label)).toEqual(["Refresh model catalog", "Show extra variants and older models", "Edit favorites", "Verify favorites", "Edit model defaults", "Configure providers"]);
+    expect(handleTuiSettingsPickerKey(menu, { name: "enter" })).toEqual({ state: parent, handled: true, refreshAllCatalogs: true });
+    menu = handleTuiSettingsPickerKey(menu, { name: "down" }).state!;
+    const revealed = handleTuiSettingsPickerKey(menu, { name: "enter" }).state!;
+    expect(revealed.revealAll).toBe(true);
+    expect(revealed.query).toBe(parent.query);
+    expect(revealed.intelligenceCutoff).toBe("1500");
+    expect(revealed.options[revealed.selectedIndex]?.value).toBe("p/b");
+    expect(handleTuiSettingsPickerKey(revealed, { name: "enter" }).state?.options
+        .find((row) => row.value === "variants")?.label).toBe("Hide extra variants and older models");
 });
 
 test("Verify this model checks the row the list is on", () => {
@@ -142,8 +151,7 @@ test.each([110, 124])("Manage models opens with the mouse at width %i", async (w
         await setup.renderOnce();
         expect(state.kind).toBe("model_menu");
         expect(setup.captureCharFrame()).toContain("Refresh model catalog");
-        expect(setup.captureCharFrame()).toContain("Remove from favorites");
-        expect(setup.captureCharFrame()).not.toContain("> Remove from favorites");
+        expect(setup.captureCharFrame()).not.toContain("Remove from favorites");
         expect(view.handleEditorKey(state, { name: "a" }).handled).toBe(false);
         const returned = handleTuiSettingsPickerKey(state, { name: "escape" }).state!;
         expect(returned.modelFocus).toBe("more");
@@ -158,45 +166,37 @@ test("More scrolls its actions and wraps them within a narrow terminal", async (
     setup.renderer.root.add(view.surface);
     view.surface.visible = true;
     try {
-        let menu = handleTuiSettingsPickerKey({ ...base, tab: "all" }, more).state!;
+        let menu = handleTuiSettingsPickerKey({ ...base, tab: "all", modelFocus: "more" }, { name: "enter" }).state!;
         menu = handleTuiSettingsPickerKey(menu, { name: "down" }).state!;
         view.update(menu);
         await setup.renderOnce();
-        const frame = setup.captureCharFrame();
-        expect(frame).toContain("older models");
-        expect(frame).toContain("Alpha · p");
-        menu = handleTuiSettingsPickerKey(menu, { name: "down" }).state!;
+        expect(setup.captureCharFrame()).toContain("older models");
+        for (let step = 0; step < 4; step++) menu = handleTuiSettingsPickerKey(menu, { name: "down" }).state!;
         view.update(menu); await setup.renderOnce();
-        expect(setup.captureCharFrame()).toContain("Refresh model catalog");
-        expect(setup.captureCharFrame()).toContain("Reload connected catalogs");
+        expect(setup.captureCharFrame()).toContain("Configure providers");
+        expect(setup.captureCharFrame()).toContain("Manage provider connections");
         expect(view.box.screenY + view.box.height).toBeLessThanOrEqual(20);
     } finally { setup.renderer.destroy(); }
 });
 
-test("Manage models names the action target and explains each selected action", async () => {
+test("the model menu names its model in the title and explains each action", async () => {
     const setup = await createTestRenderer({ width: 100, height: 36 });
     const view = createTuiSettingsPickerView(setup.renderer);
     setup.renderer.root.add(view.surface); view.surface.visible = true;
     try {
         const menu = handleTuiSettingsPickerKey({ ...base, tab: "all" }, more).state!;
-        expect(menu.subtitle).toBe("Selected: Alpha · p");
         for (let selectedIndex = 0; selectedIndex < menu.options.length; selectedIndex++) {
             view.update({ ...menu, selectedIndex }); await setup.renderOnce();
             const lines = setup.captureCharFrame().split("\n");
-            const target = lines.findIndex((line) => line.includes("Alpha · p"));
+            const title = lines.findIndex((line) => line.includes("Alpha · p"));
             const action = lines.findIndex((line) => line.includes(menu.options[selectedIndex]!.label));
             const helper = lines.findIndex((line) => line.includes(menu.options[selectedIndex]!.description));
-            expect(target).toBeGreaterThan(0);
-            expect(action).toBeGreaterThan(target);
+            expect(title).toBeGreaterThan(0);
+            expect(action).toBeGreaterThan(title);
             expect(helper).toBeGreaterThan(action);
-            const favorite = lines.findIndex((line) => line.includes("Remove from favorites"));
-            const general = lines.findIndex((line) => line.includes(menu.options[1]!.label));
-            expect(favorite).toBe(target + 1);
-            expect(general).toBe(favorite + 2);
-            expect(lines[favorite + 1]!.trim()).toBe("");
         }
         const empty = handleTuiSettingsPickerKey({ ...base, options: [] }, more).state!;
-        expect(empty.subtitle).toBeUndefined();
+        expect(empty.manageTarget).toBe("list");
         expect(empty.options.some((option) => option.value === "library")).toBe(false);
     } finally { setup.renderer.destroy(); }
 });

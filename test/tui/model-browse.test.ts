@@ -6,7 +6,7 @@ import { modelDetailFacts } from "../../clients/tui/settings-picker-model.ts";
 import { createTestRenderer } from "@opentui/core/testing";
 import { TUI_ACCENT, TUI_ELEMENT } from "../../clients/tui/palette.ts";
 import { shortlistFactsText, shortlistLegendText } from "../../clients/tui/settings-picker-model.ts";
-import { type BrowseDisplayRow, handleModelBrowseKey, modelBrowse, browseHeader, browseFooter, browseScopeCaption, browseModels, browseMatches, browseMoreText, browseWindow, emptyModelBrowse, modelBrowseScope, modelBrowseSort, browseSort, browseSections, MODEL_BROWSE_TIPS, modelBrowseTip } from "../../clients/tui/model-browse.ts";
+import { type BrowseDisplayRow, handleModelBrowseKey, modelBrowse, browseHeader, browseFooter, browseScopeCaption, browseScopeIndicator, browseModels, browseMatches, browseMoreText, browseWindow, emptyModelBrowse, modelBrowseScope, modelBrowseSort, browseSort, browseSections, MODEL_BROWSE_TIPS, modelBrowseTip } from "../../clients/tui/model-browse.ts";
 import { createTuiSettingsPickerView, handleTuiSettingsPickerKey, startTuiProviderPicker, withTuiPickerParent, syncTuiModelPicker, updateTuiSettingsPickerSearch, type TuiSettingsPickerState } from "../../clients/tui/settings-picker.ts";
 
 const rows = [
@@ -67,7 +67,7 @@ test.each(["standard", "detailed"] as const)("a sparse %s list holds the full he
         await setup.renderOnce();
         const sparseHeight = view.box.height;
         const lines = setup.captureCharFrame().split("\n");
-        const scope = lines.findIndex((line) => line.includes("Browse models · Favorites"));
+        const scope = lines.findIndex((line) => line.includes("Browse models · ● Favorites  ○ Recommended  ○ All connected"));
         const row = lines.findIndex((line) => line.includes("* Item 0"));
         expect(lines.some((line) => line.includes("View:"))).toBe(false);
         expect(lines.some((line) => line.trim() === "Favorites")).toBe(false);
@@ -408,10 +408,11 @@ test("reduced catalogs hide old entries without hiding kept models or search res
         { ...rows[2]!, pooledRank: undefined, hiddenByDefault: "superseded" as const }];
     let state = chooseScope(modelBrowse({ ...base, allOptions: options }, "browse"));
     expect(browseMatches(state).map((row) => row.model)).toEqual(["a", "b"]);
-    expect(handleModelBrowseKey(state, { name: "k", ctrl: true }).state?.options.find((row) => row.value === "variants")?.label).toBe("Show extra variants and older models");
+    const listMenu = (at: TuiSettingsPickerState) => handleModelBrowseKey({ ...at, modelFocus: "more" }, { name: "enter" }).state;
+    expect(listMenu(state)?.options.find((row) => row.value === "variants")?.label).toBe("Show extra variants and older models");
     state = handleModelBrowseKey(state, { name: "a", ctrl: true }).state!;
     expect(browseMatches(state)).toHaveLength(3);
-    expect(handleModelBrowseKey(state, { name: "k", ctrl: true }).state?.options.find((row) => row.value === "variants")?.label).toBe("Hide extra variants and older models");
+    expect(listMenu(state)?.options.find((row) => row.value === "variants")?.label).toBe("Hide extra variants and older models");
     state = handleModelBrowseKey(state, { name: "a", ctrl: true }).state!;
     const search = updateTuiSettingsPickerSearch(state, "gamma").state!;
     expect(search.options[search.selectedIndex]?.model).toBe("c");
@@ -813,10 +814,9 @@ test("scope is prominent and highlighting across provider boundaries never moves
                 // Nothing is folded here, so no group shows the folded marker.
                 expect(frame).not.toContain("▶");
                 if (mode === "browse") {
-                    expect(frame).toContain("All connected models");
+                    expect(frame).toContain("● All connected");
                     expect(frame).not.toContain("[ Catalog ]");
                     expect(frame).not.toContain("[ Library ]");
-                    expect(frame).toContain("All connected models");
                 }
             }
         }
@@ -1187,14 +1187,15 @@ test("the header carries the scope toggle next to the scope it changes", async (
     } finally { setup.renderer.destroy(); }
 });
 
-test("every scope says what it holds, and All points at Recommended", () => {
+test("every scope says what it holds, and the header names every scope with the current one marked", () => {
     expect(browseScopeCaption("pool")).toContain("Models you saved");
     expect(browseScopeCaption("recommended")).toContain("picked by hand");
-    // All is the long list, so it names the shorter one and the key that reaches it.
-    expect(browseScopeCaption("all")).toContain("Ctrl+G to switch to Recommended");
+    expect(browseScopeCaption("all")).toBe("Every model your providers offer.");
+    expect(browseScopeIndicator("recommended")).toBe("○ Favorites  ● Recommended  ○ All connected");
+    expect(browseScopeIndicator(undefined)).toBe("● Favorites  ○ Recommended  ○ All connected");
 });
 
-test("Detailed drops an empty Status column and wraps a caption too wide for one line", async () => {
+test("Detailed drops an empty Status column and a narrow header names only the current scope", async () => {
     const setup = await createTestRenderer({ width: 70, height: 30 });
     const view = createTuiSettingsPickerView(setup.renderer);
     setup.renderer.root.add(view.surface); view.surface.visible = true;
@@ -1205,6 +1206,7 @@ test("Detailed drops an empty Status column and wraps a caption too wide for one
         const frame = setup.captureCharFrame();
         expect(frame).not.toMatch(/Output  +[UCH]/);
         expect(frame).toContain("anthropic-claude-opus-4.8-long");
-        expect(frame).toContain("Recommended, a shorter list.");
+        // Too narrow for every scope, so the header names only the current one.
+        expect(frame).toContain("Browse models · All connected models");
     } finally { setup.renderer.destroy(); }
 });
