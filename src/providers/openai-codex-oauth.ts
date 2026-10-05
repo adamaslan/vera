@@ -6,6 +6,7 @@ import {
     type AuthStorage,
 } from "./auth-storage.ts";
 import { UserFacingError } from "../user-facing-error.ts";
+import { oauthCallbackResponse } from "./oauth-callback-page.ts";
 
 export const OPENAI_CODEX_PROVIDER_ID = "openai-codex";
 
@@ -484,26 +485,37 @@ function startOpenAICodexCallback(
                         return new Response("Not found", { status: 404 });
                     }
                     if (url.searchParams.get("state") !== expectedState) {
-                        return new Response("State mismatch", { status: 400 });
+                        return oauthCallbackResponse({
+                            ok: false,
+                            title: "This sign-in link is out of date",
+                            detail: "Choose Connect again in Vera to start a new sign-in.",
+                        });
                     }
                     const error = url.searchParams.get("error");
                     if (error !== null) {
                         settle(new Error(`OpenAI Codex login failed: ${error}`));
-                        return new Response("Authentication failed", { status: 400 });
+                        return oauthCallbackResponse({
+                            ok: false,
+                            title: "Sign-in did not finish",
+                            detail: `ChatGPT answered "${error}". Choose Connect again in Vera to retry.`,
+                        });
                     }
                     const authorizationCode = url.searchParams.get("code");
                     if (!authorizationCode) {
                         settle(new Error("OpenAI Codex callback omitted its code"));
-                        return new Response("Missing authorization code", { status: 400 });
+                        return oauthCallbackResponse({
+                            ok: false,
+                            title: "Sign-in did not finish",
+                            detail: "ChatGPT sent no authorization code. Choose Connect again in Vera to retry.",
+                        });
                     }
 
                     settle(authorizationCode);
-                    return new Response(
-                        "<!doctype html><title>Vera login complete</title>"
-                            + "<h1>Vera login complete</h1>"
-                            + "<p>You can close this tab.</p>",
-                        { headers: { "Content-Type": "text/html; charset=utf-8" } },
-                    );
+                    return oauthCallbackResponse({
+                        ok: true,
+                        title: "Signed in to ChatGPT",
+                        detail: "Return to Vera. You can close this tab.",
+                    });
                 },
             });
             break;
