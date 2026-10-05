@@ -21,8 +21,8 @@ test("the model picker's refresh key asks the provider and shows the new list", 
         await session.waitForVisiblePane("Start a conversation");
         session.sendText("/models");
         session.sendKey("Enter");
-        let pane = await session.waitForVisiblePane("Browse models");
-        expect(pane).toContain("Browse models");
+        let pane = await session.waitForVisiblePane("Compare models");
+        expect(pane).toContain("Compare models");
         expect(pane).not.toContain("Two");
 
         // The page opens on Favorites, and the catalog rows are under All.

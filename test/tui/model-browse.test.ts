@@ -67,17 +67,17 @@ test.each(["standard", "detailed"] as const)("a sparse %s list holds the full he
         await setup.renderOnce();
         const sparseHeight = view.box.height;
         const lines = setup.captureCharFrame().split("\n");
-        const scope = lines.findIndex((line) => line.includes("Browse models · ● Favorites  ○ Recommended  ○ All connected"));
+        const scope = lines.findIndex((line) => line.includes("Compare models · ● Favorites  ○ Recommended  ○ All connected"));
         const row = lines.findIndex((line) => line.includes("* Item 0"));
         expect(lines.some((line) => line.includes("View:"))).toBe(false);
         expect(lines.some((line) => line.trim() === "Favorites")).toBe(false);
-        expect(lines[scope]!.indexOf("Browse models")).toBe(lines[row]!.indexOf("*"));
+        expect(lines[scope]!.indexOf("Compare models")).toBe(lines[row]!.indexOf("*"));
         const priceLine = (frame: string): number =>
             frame.split("\n").findIndex((line) => line.includes("Price unavailable"));
         const sparsePrice = priceLine(setup.captureCharFrame());
         if (browseView === "standard") {
             expect(sparsePrice).toBeGreaterThan(row);
-            expect(lines[scope]!.indexOf("Browse models"))
+            expect(lines[scope]!.indexOf("Compare models"))
                 .toBe(lines[sparsePrice]!.indexOf("Price"));
         }
         expect(lines.some((line) => line.includes("* favorite"))).toBe(false);
@@ -122,7 +122,7 @@ test.each(["standard", "detailed"] as const)("%s picker aligns labels and reserv
         const blurred = setup.captureCharFrame().split("\n");
         expect(blurred.find((line) => line.includes("Filter and sort"))).toBe(lines.find((line) => line.includes("Filter and sort")));
         const heading = lines.find((line) => line.includes("▼ p"))!;
-        const bodyColumn = lines.find((line) => line.includes("Browse models"))!.indexOf("Browse models");
+        const bodyColumn = lines.find((line) => line.includes("Compare models"))!.indexOf("Compare models");
         expect(heading.indexOf("▼")).toBe(bodyColumn);
         expect(lines.find((line) => line.includes("* Beta"))!.indexOf("*")).toBe(bodyColumn);
         expect(heading.indexOf("p")).toBe(bodyColumn + 2);
@@ -567,7 +567,7 @@ test("narrow Switch cards draw nothing outside the card and keep one gap above s
                         expect(current[1]! - geometry[1]!).toBe(1);
                     } else geometry = current;
                     expect(screenY + view.box.height).toBeLessThanOrEqual(height);
-                    expect(lines.find((line) => line.includes("Browse models"))).toContain("esc");
+                    expect(lines.find((line) => line.includes("Compare models"))).toContain("esc");
                     expect(lines.findIndex((line) => line.includes("Search models"))).toBeLessThan(lines.findIndex((line) => line.includes("Filter and sort")));
 
                 }
@@ -751,7 +751,7 @@ test("browse panels stay vertically centred as scope, content, and terminal size
         expect(Math.abs(2 * view.box.screenY + view.box.height - 24)).toBeLessThanOrEqual(1);
         view.surface.visible = false;
         await setup.renderOnce();
-        expect(setup.captureCharFrame()).not.toContain("Browse models");
+        expect(setup.captureCharFrame()).not.toContain("Compare models");
     } finally { setup.renderer.destroy(); }
 });
 
@@ -1177,12 +1177,12 @@ test("the header carries the scope toggle next to the scope it changes", async (
     try {
         view.update(modelBrowse(base, "browse")); await setup.renderOnce();
         const header = setup.captureCharFrame().split("\n")
-            .find((line) => line.includes("Browse models ·"))!;
+            .find((line) => line.includes("Compare models ·"))!;
         expect(header).toContain("Ctrl+G scope");
         view.update({ ...modelBrowse(base, "browse"), query: "alp", queryCursor: 3 });
         await setup.renderOnce();
         const searching = setup.captureCharFrame().split("\n")
-            .find((line) => line.includes("Browse models ·"))!;
+            .find((line) => line.includes("Compare models ·"))!;
         expect(searching).not.toContain("Ctrl+G scope");
     } finally { setup.renderer.destroy(); }
 });
@@ -1207,6 +1207,6 @@ test("Detailed drops an empty Status column and a narrow header names only the c
         expect(frame).not.toMatch(/Output  +[UCH]/);
         expect(frame).toContain("anthropic-claude-opus-4.8-long");
         // Too narrow for every scope, so the header names only the current one.
-        expect(frame).toContain("Browse models · All connected models");
+        expect(frame).toContain("Compare models · All connected models");
     } finally { setup.renderer.destroy(); }
 });
